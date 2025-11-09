@@ -245,6 +245,31 @@
           </ul>
         </div>
 
+        <div class="customization-group">
+          <h3>Electron Upgrade</h3>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <label for="electron-version-select" style="min-width: 100px;">Select Build:</label>
+              <select id="electron-version-select" style="flex: 1; padding: 8px; border-radius: 4px; background-color: var(--secondary, #00C6FF); color: var(--bg, #121418); border: none; cursor: pointer;">
+                <option value="stable">Stable</option>
+                <option value="nightly">Nightly</option>
+              </select>
+            </div>
+            <div id="electron-versions-container" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+              <span id="electron-loading" style="color: #888;">Loading available versions...</span>
+              <div id="electron-version-info" style="display: none;">
+                <span id="electron-version-text"></span>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button id="check-electron-versions">Check for Updates</button>
+              <button id="upgrade-electron-btn" style="display: none;" disabled>Upgrade Electron</button>
+              <span id="electron-status-text" style="display: none; color: #888; align-self: center;"></span>
+            </div>
+            <p class="note" style="margin-top: 8px;">Upgrading Electron will require the application to restart.</p>
+          </div>
+        </div>
+
         <div class="customization-group about-actions">
           <button id="copy-about-btn">Copy diagnostics</button>
           <a id="github-link" href="https://github.com/Bobbybear007/NebulaBrowser" class="github-btn" rel="noopener noreferrer">

@@ -262,7 +262,8 @@ async function populateAbout() {
     byId('about-mem').textContent = `${info.totalMemGB} GB`;
 
     const copyBtn = document.getElementById('copy-about-btn');
-    if (copyBtn) {
+    if (copyBtn && !copyBtn.dataset.listenerAttached) {
+      copyBtn.dataset.listenerAttached = 'true';
       copyBtn.addEventListener('click', async () => {
         const payload = [
           `Nebula ${info.appVersion} (${info.isPackaged ? 'packaged' : 'dev'})`,
@@ -289,7 +290,188 @@ async function populateAbout() {
 // Populate about info after DOM is ready
 window.addEventListener('DOMContentLoaded', () => {
   populateAbout();
+  setupElectronUpgrade();
+  
+  // Refresh about info when About tab is clicked
+  const aboutTabBtn = document.getElementById('tab-about');
+  if (aboutTabBtn) {
+    aboutTabBtn.addEventListener('click', () => {
+      // Refresh after a short delay to allow tab transition
+      setTimeout(() => {
+        populateAbout();
+      }, 100);
+    });
+  }
 });
+
+// Electron upgrade feature setup
+async function setupElectronUpgrade() {
+  const versionSelect = document.getElementById('electron-version-select');
+  const checkBtn = document.getElementById('check-electron-versions');
+  const upgradeBtn = document.getElementById('upgrade-electron-btn');
+  const loadingSpan = document.getElementById('electron-loading');
+  const versionContainer = document.getElementById('electron-versions-container');
+  const versionInfo = document.getElementById('electron-version-info');
+  const versionText = document.getElementById('electron-version-text');
+  const statusText = document.getElementById('electron-status-text');
+
+  if (!checkBtn || !versionSelect) return;
+
+  let availableVersion = null;
+  let currentVersion = null;
+
+  const checkVersions = async () => {
+    try {
+      if (!ipc) {
+        showStatus('IPC not available');
+        return;
+      }
+
+      checkBtn.disabled = true;
+      loadingSpan.style.display = 'block';
+      versionInfo.style.display = 'none';
+      statusText.style.display = 'none';
+      statusText.textContent = '';
+
+      const buildType = versionSelect.value;
+      const result = await ipc.invoke('get-electron-versions', buildType);
+
+      if (result.error) {
+        statusText.textContent = `Error: ${result.error}`;
+        statusText.style.display = 'block';
+        showStatus(`Failed to check versions: ${result.error}`);
+      } else {
+        availableVersion = result.available;
+        currentVersion = result.current;
+        
+        if (availableVersion) {
+          versionText.textContent = `Available: ${availableVersion} | Current: ${currentVersion}`;
+          versionInfo.style.display = 'block';
+          
+          // Enable upgrade button only if there's a newer version
+          const isNewer = compareVersions(availableVersion, currentVersion) > 0;
+          upgradeBtn.disabled = !isNewer;
+          upgradeBtn.style.display = 'block';
+          
+          if (isNewer) {
+            statusText.textContent = 'Update available!';
+            statusText.style.color = '#4CAF50';
+          } else {
+            statusText.textContent = 'You are running the latest version.';
+            statusText.style.color = '#888';
+          }
+          statusText.style.display = 'block';
+          showStatus(`Current: ${currentVersion} | Latest ${buildType}: ${availableVersion}`);
+        }
+      }
+
+      checkBtn.disabled = false;
+      loadingSpan.style.display = 'none';
+    } catch (error) {
+      console.error('Error checking versions:', error);
+      statusText.textContent = `Error: ${error.message}`;
+      statusText.style.display = 'block';
+      showStatus('Failed to check versions');
+      checkBtn.disabled = false;
+      loadingSpan.style.display = 'none';
+    }
+  };
+
+  const handleUpgrade = async () => {
+    const buildType = versionSelect.value;
+    if (!availableVersion) {
+      showStatus('No version information available');
+      return;
+    }
+
+    const confirmed = confirm(
+      `Upgrade Electron from ${currentVersion} to ${availableVersion} (${buildType})?\n\nThe application will restart automatically.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      upgradeBtn.disabled = true;
+      checkBtn.disabled = true;
+      versionSelect.disabled = true;
+      statusText.textContent = 'Downloading and installing...';
+      statusText.style.color = '#FFC107';
+      statusText.style.display = 'block';
+      showStatus('Starting Electron upgrade...');
+
+      const result = await ipc.invoke('upgrade-electron', buildType);
+
+      if (result.success) {
+        statusText.textContent = result.message;
+        statusText.style.color = '#4CAF50';
+        showStatus(result.message);
+        
+        // Restart the app after a short delay
+        setTimeout(() => {
+          if (ipc) {
+            ipc.invoke('restart-app').catch(err => console.error('Restart failed:', err));
+          }
+        }, 1500);
+      } else {
+        statusText.textContent = `Failed: ${result.error}`;
+        statusText.style.color = '#F44336';
+        showStatus(`Upgrade failed: ${result.error}`);
+        upgradeBtn.disabled = false;
+        checkBtn.disabled = false;
+        versionSelect.disabled = false;
+      }
+    } catch (error) {
+      console.error('Upgrade error:', error);
+      statusText.textContent = `Error: ${error.message}`;
+      statusText.style.color = '#F44336';
+      statusText.style.display = 'block';
+      showStatus(`Upgrade error: ${error.message}`);
+      upgradeBtn.disabled = false;
+      checkBtn.disabled = false;
+      versionSelect.disabled = false;
+    }
+  };
+
+  checkBtn.addEventListener('click', checkVersions);
+  upgradeBtn.addEventListener('click', handleUpgrade);
+  
+  versionSelect.addEventListener('change', () => {
+    // Reset UI when build type changes
+    versionInfo.style.display = 'none';
+    upgradeBtn.style.display = 'none';
+    upgradeBtn.disabled = true;
+    statusText.style.display = 'none';
+    loadingSpan.style.display = 'block';
+    availableVersion = null;
+  });
+  
+  // Auto-refresh about tab and electron versions when this section comes into view
+  const aboutTabBtn = document.getElementById('tab-about');
+  if (aboutTabBtn) {
+    aboutTabBtn.addEventListener('click', () => {
+      setTimeout(() => {
+        // Refresh about info when About tab is clicked
+        populateAbout();
+        // Also refresh electron versions display
+        checkVersions();
+      }, 100);
+    });
+  }
+}
+
+// Helper function to compare semantic versions
+function compareVersions(v1, v2) {
+  const parts1 = v1.split('-')[0].split('.').map(x => parseInt(x, 10));
+  const parts2 = v2.split('-')[0].split('.').map(x => parseInt(x, 10));
+  
+  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+    const p1 = parts1[i] || 0;
+    const p2 = parts2[i] || 0;
+    if (p1 > p2) return 1;
+    if (p1 < p2) return -1;
+  }
+  return 0;
+}
 
 // Keep settings open when clicking GitHub by asking host to open externally/new tab
 window.addEventListener('DOMContentLoaded', () => {

@@ -666,6 +666,150 @@ ipcMain.handle('open-devtools', (event) => {
   return contents.isDevToolsOpened();
 });
 
+// Helper function to read package.json version
+function getInstalledElectronVersion() {
+  try {
+    const packageJsonPath = path.join(__dirname, 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    
+    // Get the version from devDependencies
+    const electronDep = packageJson.devDependencies?.electron;
+    const electronNightlyDep = packageJson.devDependencies?.['electron-nightly'];
+    
+    if (electronDep) {
+      return electronDep.replace(/^\D+/, ''); // Remove ^ or ~ or other version specifiers
+    }
+    if (electronNightlyDep) {
+      return electronNightlyDep.replace(/^\D+/, '');
+    }
+    
+    return app.getVersion();
+  } catch (err) {
+    console.error('Error reading installed electron version:', err);
+    return app.getVersion();
+  }
+}
+
+// Electron version management handlers
+ipcMain.handle('get-electron-versions', async (event, buildType = 'stable') => {
+  const https = require('https');
+  
+  return new Promise((resolve) => {
+    let url;
+    
+    if (buildType === 'nightly') {
+      // Get latest nightly version from npm
+      url = 'https://registry.npmjs.org/electron-nightly/latest';
+    } else {
+      // Get latest stable version from npm
+      url = 'https://registry.npmjs.org/electron/latest';
+    }
+    
+    const request = https.get(url, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const packageInfo = JSON.parse(data);
+          // Get the actual installed version from package.json, not app.getVersion()
+          const installedVersion = getInstalledElectronVersion();
+          resolve({
+            available: packageInfo.version,
+            current: installedVersion,
+            buildType: buildType
+          });
+        } catch (err) {
+          console.error('Failed to parse version info:', err);
+          resolve({
+            available: null,
+            current: getInstalledElectronVersion(),
+            error: 'Failed to fetch version info'
+          });
+        }
+      });
+    });
+    
+    request.on('error', (err) => {
+      console.error('Failed to fetch versions:', err);
+      resolve({
+        available: null,
+        current: getInstalledElectronVersion(),
+        error: err.message
+      });
+    });
+    
+    request.setTimeout(5000, () => {
+      request.destroy();
+      resolve({
+        available: null,
+        current: getInstalledElectronVersion(),
+        error: 'Version check timed out'
+      });
+    });
+  });
+});
+
+ipcMain.handle('upgrade-electron', async (event, buildType = 'stable') => {
+  const { execFile } = require('child_process');
+  const packageName = buildType === 'nightly' ? 'electron-nightly' : 'electron';
+  
+  return new Promise((resolve) => {
+    // First, remove the other electron package if switching types
+    const otherPackage = buildType === 'nightly' ? 'electron' : 'electron-nightly';
+    
+    // Run npm install to upgrade the package
+    const args = ['install', '--save-dev', packageName + '@latest'];
+    
+    execFile('npm', args, 
+      { cwd: __dirname, shell: true, maxBuffer: 10 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (error) {
+          console.error('Upgrade failed:', error);
+          console.error('stderr:', stderr);
+          resolve({
+            success: false,
+            error: error.message,
+            message: 'Failed to upgrade Electron'
+          });
+        } else {
+          console.log('Upgrade output:', stdout);
+          console.log('Upgrade stderr:', stderr);
+          
+          // Update package.json to remove the other electron variant if needed
+          try {
+            const packageJsonPath = path.join(__dirname, 'package.json');
+            const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+            
+            // Remove electron if we're upgrading to nightly
+            if (buildType === 'nightly' && packageJson.devDependencies?.electron) {
+              delete packageJson.devDependencies.electron;
+              fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
+            }
+            // Remove electron-nightly if we're upgrading to stable
+            else if (buildType === 'stable' && packageJson.devDependencies?.['electron-nightly']) {
+              delete packageJson.devDependencies['electron-nightly'];
+              fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
+            }
+          } catch (err) {
+            console.warn('Could not clean up alternate electron package:', err);
+          }
+          
+          resolve({
+            success: true,
+            message: 'Electron upgrade completed. Restarting application...'
+          });
+        }
+      }
+    );
+  });
+});
+
+ipcMain.handle('restart-app', async (event) => {
+  // Quit and relaunch the app
+  app.relaunch();
+  app.quit();
+});
+
 // Open local file dialog -> returns file:// URL (or null if cancelled)
 ipcMain.handle('show-open-file-dialog', async () => {
   try {
