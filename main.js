@@ -61,18 +61,19 @@ if (process.platform === 'linux') {
     console.log(`[GPU] SteamOS/Gamescope DETECTED: ${detectionReason}`);
     console.log('[GPU] Applying SteamOS-specific GPU flags for webview rendering...');
     
-    // SteamOS GPU flags - use ANGLE for rendering
+    // Critical flags for SteamOS/Gamescope webview rendering
+    // SteamOS only supports egl-angle, NOT desktop GL
     app.commandLine.appendSwitch('ozone-platform', 'x11');
-    app.commandLine.appendSwitch('use-angle', 'gl');
-    app.commandLine.appendSwitch('angle-platform-type', 'x11');
-    
-    // GPU process settings
-    app.commandLine.appendSwitch('in-process-gpu');
+    app.commandLine.appendSwitch('use-gl', 'egl');
+    app.commandLine.appendSwitch('use-angle', 'default');
+    app.commandLine.appendSwitch('disable-gpu-compositing');
     app.commandLine.appendSwitch('disable-gpu-vsync');
+    app.commandLine.appendSwitch('disable-software-rasterizer');
+    app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor,UseChromeOSDirectVideoDecoder');
+    app.commandLine.appendSwitch('enable-features', 'UseOzonePlatform,Vulkan');
     
-    // Feature flags
-    app.commandLine.appendSwitch('enable-features', 'VulkanFromANGLE,UseOzonePlatform');
-    app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
+    // In-process GPU can help with stability on Steam Deck
+    app.commandLine.appendSwitch('in-process-gpu');
   } else {
     console.log('[GPU] Standard Linux environment detected');
     
