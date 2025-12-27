@@ -1,67 +1,100 @@
 // ============================================================================
-// CRITICAL: GPU flags must be applied BEFORE Electron loads
-// These must be at the VERY TOP of main.js for packaged apps
+// CRITICAL: Load Electron first, then apply GPU flags IMMEDIATELY
+// app.commandLine.appendSwitch() must be called before app.ready
 // ============================================================================
+const { app, BrowserWindow, ipcMain, session, screen, shell, dialog, Menu, clipboard, webContents } = require('electron');
+
+// Apply Linux/SteamOS GPU flags IMMEDIATELY after loading Electron
+// This MUST happen before app.ready and before any other initialization
 if (process.platform === 'linux') {
   const fs = require('fs');
   
   // Detect SteamOS/Gamescope environment
   let isSteamOS = false;
+  let detectionReason = '';
+  
   try {
-    if (fs.existsSync('/etc/steamos-release')) isSteamOS = true;
-    else if (fs.existsSync('/usr/share/steamos/steamos.conf')) isSteamOS = true;
-    else if (process.env.GAMESCOPE_WAYLAND_DISPLAY) isSteamOS = true;
-    else if (process.env.SteamDeck) isSteamOS = true;
-    else if (process.env.SteamAppId) isSteamOS = true;
-    else if (fs.existsSync('/etc/os-release')) {
+    if (fs.existsSync('/etc/steamos-release')) {
+      isSteamOS = true;
+      detectionReason = '/etc/steamos-release exists';
+    } else if (fs.existsSync('/usr/share/steamos/steamos.conf')) {
+      isSteamOS = true;
+      detectionReason = '/usr/share/steamos/steamos.conf exists';
+    } else if (process.env.GAMESCOPE_WAYLAND_DISPLAY) {
+      isSteamOS = true;
+      detectionReason = 'GAMESCOPE_WAYLAND_DISPLAY env var set';
+    } else if (process.env.SteamDeck === '1' || process.env.SteamDeck === 'true') {
+      isSteamOS = true;
+      detectionReason = 'SteamDeck env var set';
+    } else if (process.env.SteamAppId) {
+      isSteamOS = true;
+      detectionReason = 'SteamAppId env var set (running from Steam)';
+    } else if (process.env.STEAM_COMPAT_DATA_PATH) {
+      isSteamOS = true;
+      detectionReason = 'STEAM_COMPAT_DATA_PATH set (Proton/Steam environment)';
+    } else if (fs.existsSync('/etc/os-release')) {
       const osRelease = fs.readFileSync('/etc/os-release', 'utf8');
-      if (osRelease.includes('SteamOS') || osRelease.includes('steamos')) isSteamOS = true;
+      if (osRelease.toLowerCase().includes('steamos')) {
+        isSteamOS = true;
+        detectionReason = '/etc/os-release contains SteamOS';
+      }
     }
-  } catch (e) {}
+    
+    // Also check for gamescope in display server - common on Steam Deck
+    if (!isSteamOS && process.env.XDG_CURRENT_DESKTOP) {
+      const desktop = process.env.XDG_CURRENT_DESKTOP.toLowerCase();
+      if (desktop.includes('gamescope')) {
+        isSteamOS = true;
+        detectionReason = 'XDG_CURRENT_DESKTOP contains gamescope';
+      }
+    }
+  } catch (e) {
+    console.log('[GPU] SteamOS detection error:', e.message);
+  }
+
+  // Always apply basic Linux sandbox fixes
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-gpu-sandbox');
+  app.commandLine.appendSwitch('disable-dev-shm-usage');
   
-  // Apply flags via app.commandLine BEFORE requiring electron
-  // We need to do this via process.argv for packaged apps
-  const linuxFlags = [
-    '--disable-gpu-sandbox',
-    '--no-sandbox',
-    '--disable-dev-shm-usage'
-  ];
-  
-  if (isSteamOS || process.env.GAMESCOPE_WAYLAND_DISPLAY) {
-    console.log('[GPU] SteamOS/Gamescope detected at startup - applying critical flags');
-    linuxFlags.push(
-      '--ozone-platform=x11',
-      '--disable-gpu-compositing',
-      '--disable-gpu-vsync',
-      '--disable-accelerated-2d-canvas',
-      '--use-gl=desktop',
-      '--disable-features=VizDisplayCompositor',
-      '--enable-features=UseOzonePlatform'
-    );
+  if (isSteamOS) {
+    console.log(`[GPU] SteamOS/Gamescope DETECTED: ${detectionReason}`);
+    console.log('[GPU] Applying SteamOS-specific GPU flags for webview rendering...');
+    
+    // Critical flags for SteamOS/Gamescope webview rendering
+    app.commandLine.appendSwitch('ozone-platform', 'x11');
+    app.commandLine.appendSwitch('disable-gpu-compositing');
+    app.commandLine.appendSwitch('disable-gpu-vsync');
+    app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
+    app.commandLine.appendSwitch('use-gl', 'desktop');
+    app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
+    app.commandLine.appendSwitch('enable-features', 'UseOzonePlatform');
+    app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+    
+    // Additional flags that help with AMD GPU under Gamescope
+    app.commandLine.appendSwitch('disable-background-networking');
+    app.commandLine.appendSwitch('in-process-gpu');
   } else {
+    console.log('[GPU] Standard Linux environment detected');
+    
     // General Linux - detect Wayland vs X11
     const waylandDisplay = process.env.WAYLAND_DISPLAY;
     const x11Display = process.env.DISPLAY;
     
     if (waylandDisplay && !x11Display) {
-      linuxFlags.push('--ozone-platform=wayland', '--enable-features=UseOzonePlatform,WaylandWindowDecorations');
+      console.log('[GPU] Pure Wayland environment - using wayland backend');
+      app.commandLine.appendSwitch('ozone-platform', 'wayland');
+      app.commandLine.appendSwitch('enable-features', 'UseOzonePlatform,WaylandWindowDecorations');
     } else if (x11Display) {
-      linuxFlags.push('--ozone-platform=x11');
+      console.log('[GPU] X11 environment detected');
+      app.commandLine.appendSwitch('ozone-platform', 'x11');
     }
-    linuxFlags.push('--disable-features=VizDisplayCompositor');
+    
+    app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
   }
-  
-  // Add flags that aren't already present
-  linuxFlags.forEach(flag => {
-    const flagName = flag.split('=')[0];
-    if (!process.argv.some(arg => arg.startsWith(flagName))) {
-      process.argv.push(flag);
-    }
-  });
 }
 // ============================================================================
 
-const { app, BrowserWindow, ipcMain, session, screen, shell, dialog, Menu, clipboard, webContents } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { pathToFileURL } = require('url');
 const fs = require('fs');
@@ -90,7 +123,7 @@ try {
   // Non-fatal: some environments may not allow commandLine changes at this time.
 }
 
-// Configure GPU settings before app is ready
+// Configure GPU settings before app is ready (additional platform-specific settings)
 gpuConfig.configure();
 
 // Set a custom application name
