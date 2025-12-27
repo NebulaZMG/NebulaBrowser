@@ -39,7 +39,7 @@ class GPUConfig {
 
   // Apply GPU configuration based on system capabilities
   configure() {
-    console.log('[GPUConfig] Additional GPU configuration...');
+    console.log('Configuring GPU settings...');
     
     // Try to detect if we're on a system that supports GPU acceleration
     const platform = process.platform;
@@ -47,37 +47,67 @@ class GPUConfig {
     
     this.isSteamOS = this.detectSteamOS();
     
-    console.log(`[GPUConfig] Platform: ${platform}, Architecture: ${arch}, SteamOS: ${this.isSteamOS}`);
+    console.log(`Platform: ${platform}, Architecture: ${arch}, SteamOS: ${this.isSteamOS}`);
     
-    // NOTE: Primary Linux/SteamOS GPU flags are now applied in main.js
-    // immediately after loading Electron, before app.ready
-    // This configure() method now only applies additional non-critical settings
+    // Apply Linux/SteamOS specific configuration FIRST (before app ready)
+    if (this.isLinux) {
+      this.applyLinuxSettings();
+    }
     
     // Start with conservative settings that usually work
     this.applyConservativeSettings();
     
-    // Try to enable GPU features progressively (skip on SteamOS - already handled)
-    if (!this.isSteamOS) {
-      this.tryEnableGPU();
-    }
+    // Try to enable GPU features progressively
+    this.tryEnableGPU();
   }
 
   // Linux-specific settings for proper rendering
-  // NOTE: Critical flags are now in main.js - this is for additional settings only
   applyLinuxSettings() {
-    // Most Linux settings are now applied earlier in main.js
-    // This method is kept for any additional non-critical settings
-    console.log('[GPUConfig] Additional Linux settings (if any)...');
+    console.log('Applying Linux-specific GPU settings...');
+    
+    // Ozone platform selection - critical for rendering on Linux
+    // Check for Wayland vs X11 environment
+    const waylandDisplay = process.env.WAYLAND_DISPLAY;
+    const gamescope = process.env.GAMESCOPE_WAYLAND_DISPLAY;
+    const x11Display = process.env.DISPLAY;
+    
+    if (this.isSteamOS || gamescope) {
+      // SteamOS/Gamescope: Force X11 backend for better compatibility
+      // Gamescope provides X11 compatibility layer that works better with Electron
+      console.log('SteamOS/Gamescope detected - using X11 Ozone backend');
+      app.commandLine.appendSwitch('ozone-platform', 'x11');
+      
+      // Disable GPU compositing issues on Steam Deck AMD GPU
+      app.commandLine.appendSwitch('disable-gpu-compositing');
+      app.commandLine.appendSwitch('disable-gpu-vsync');
+      
+      // Use software rendering for webviews if needed
+      app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
+      
+      // Fix for AMD GPU rendering issues
+      app.commandLine.appendSwitch('use-gl', 'desktop');
+      app.commandLine.appendSwitch('enable-features', 'UseOzonePlatform');
+    } else if (waylandDisplay && !x11Display) {
+      // Pure Wayland environment
+      console.log('Wayland detected - using Wayland Ozone backend');
+      app.commandLine.appendSwitch('ozone-platform', 'wayland');
+      app.commandLine.appendSwitch('enable-features', 'UseOzonePlatform,WaylandWindowDecorations');
+    } else if (x11Display) {
+      // X11 environment
+      console.log('X11 detected - using X11 Ozone backend');
+      app.commandLine.appendSwitch('ozone-platform', 'x11');
+    }
+    
+    // Common Linux fixes
+    app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
+    app.commandLine.appendSwitch('enable-unsafe-swiftshader');
   }
 
   applyConservativeSettings() {
     // Essential switches that usually don't cause issues
-    // Note: no-sandbox and disable-gpu-sandbox are already set in main.js for Linux
-    if (process.platform !== 'linux') {
-      app.commandLine.appendSwitch('no-sandbox');
-      app.commandLine.appendSwitch('disable-gpu-sandbox');
-    }
+    app.commandLine.appendSwitch('no-sandbox');
     app.commandLine.appendSwitch('disable-dev-shm-usage');
+    app.commandLine.appendSwitch('disable-gpu-sandbox');
     
     // Performance improvements that don't rely on GPU
     app.commandLine.appendSwitch('disable-background-timer-throttling');
@@ -91,7 +121,7 @@ class GPUConfig {
     try {
       // Skip aggressive GPU features on SteamOS - they conflict with Gamescope
       if (this.isSteamOS) {
-        console.log('[GPUConfig] SteamOS detected - skipping aggressive GPU acceleration');
+        console.log('SteamOS detected - skipping aggressive GPU acceleration');
         return;
       }
       
