@@ -185,6 +185,20 @@ function initNavigation() {
     launchNebot.addEventListener('click', () => navigateTo('browser://nebot'));
   }
   
+  // History section buttons
+  const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+  if (clearHistoryBtn) {
+    clearHistoryBtn.addEventListener('click', clearHistory);
+  }
+  
+  const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
+  if (refreshHistoryBtn) {
+    refreshHistoryBtn.addEventListener('click', async () => {
+      await loadHistory();
+      showToast('History refreshed');
+    });
+  }
+  
   // Settings cards
   document.querySelectorAll('.settings-card').forEach(card => {
     card.addEventListener('click', () => {
@@ -468,6 +482,15 @@ function goBack() {
   }
 }
 
+function goForward() {
+  // If viewing a website, go forward in browsing history
+  if (state.currentSection === 'browse' && state.currentWebview) {
+    if (state.currentWebview.canGoForward()) {
+      state.currentWebview.goForward();
+    }
+  }
+}
+
 // =============================================================================
 // GAMEPAD SUPPORT
 // =============================================================================
@@ -600,20 +623,24 @@ function handleGamepadInput(gamepad) {
     state.lastInput.y = false;
   }
   
-  // LB button (usually index 4) - Move cursor left / clear all
+  // LB button (usually index 4) - Go back in webview / clear OSK
   if (gamepad.buttons[4]?.pressed && !state.lastInput.lb) {
     if (state.oskVisible) {
       clearOSK();
+    } else if (state.currentSection === 'browse' && state.currentWebview) {
+      goBack();
     }
     state.lastInput.lb = true;
   } else if (!gamepad.buttons[4]?.pressed) {
     state.lastInput.lb = false;
   }
   
-  // RB button (usually index 5) - Submit when OSK open
+  // RB button (usually index 5) - Go forward in webview / submit OSK
   if (gamepad.buttons[5]?.pressed && !state.lastInput.rb) {
     if (state.oskVisible) {
       submitOSK();
+    } else if (state.currentSection === 'browse' && state.currentWebview) {
+      goForward();
     }
     state.lastInput.rb = true;
   } else if (!gamepad.buttons[5]?.pressed) {
@@ -1079,13 +1106,60 @@ async function loadBookmarks() {
 
 async function loadHistory() {
   try {
-    const stored = localStorage.getItem('siteHistory');
-    state.history = stored ? JSON.parse(stored) : [];
+    if (ipcRenderer && ipcRenderer.invoke) {
+      state.history = await ipcRenderer.invoke('load-site-history') || [];
+    } else {
+      // Fallback to localStorage
+      const stored = localStorage.getItem('siteHistory');
+      state.history = stored ? JSON.parse(stored) : [];
+    }
     renderHistory();
     renderRecentSites();
   } catch (err) {
     console.error('[BigPicture] Failed to load history:', err);
     state.history = [];
+  }
+}
+
+// Save a site to history
+async function saveToHistory(url) {
+  if (!url || url.startsWith('browser://')) return;
+  try {
+    if (ipcRenderer && ipcRenderer.invoke) {
+      await ipcRenderer.invoke('save-site-history-entry', url);
+      // Refresh history after saving
+      await loadHistory();
+    } else {
+      // Fallback to localStorage
+      let history = state.history;
+      history = history.filter(item => item !== url);
+      history.unshift(url);
+      if (history.length > 100) history = history.slice(0, 100);
+      localStorage.setItem('siteHistory', JSON.stringify(history));
+      state.history = history;
+      renderHistory();
+      renderRecentSites();
+    }
+  } catch (err) {
+    console.error('[BigPicture] Failed to save history:', err);
+  }
+}
+
+// Clear all browsing history
+async function clearHistory() {
+  try {
+    if (ipcRenderer && ipcRenderer.invoke) {
+      await ipcRenderer.invoke('clear-site-history');
+    } else {
+      localStorage.removeItem('siteHistory');
+    }
+    state.history = [];
+    renderHistory();
+    renderRecentSites();
+    showToast('History cleared');
+  } catch (err) {
+    console.error('[BigPicture] Failed to clear history:', err);
+    showToast('Failed to clear history');
   }
 }
 
@@ -1127,21 +1201,51 @@ function renderBookmarks() {
       <div class="empty-state">
         <span class="material-symbols-outlined">bookmark_border</span>
         <p>No bookmarks yet</p>
+        <p class="empty-hint">Add bookmarks in desktop mode to see them here</p>
       </div>
     `;
     return;
   }
   
   state.bookmarks.forEach(bookmark => {
-    const tile = createTile(
-      bookmark.title || bookmark.name || getDomainFromUrl(bookmark.url),
-      bookmark.url,
-      'bookmark'
-    );
+    const tile = createBookmarkTile(bookmark);
     grid.appendChild(tile);
   });
   
   updateFocusableElements();
+}
+
+function createBookmarkTile(bookmark) {
+  const tile = document.createElement('div');
+  tile.className = 'tile bookmark-tile';
+  tile.dataset.focusable = '';
+  tile.tabIndex = 0;
+  tile.dataset.url = bookmark.url;
+  
+  const title = bookmark.title || bookmark.name || getDomainFromUrl(bookmark.url);
+  const icon = bookmark.icon || 'bookmark';
+  
+  // Check if icon is a URL (favicon) or a material icon name
+  const isIconUrl = typeof icon === 'string' && /^(https?:|data:)/.test(icon);
+  
+  let iconHtml;
+  if (isIconUrl) {
+    iconHtml = `<img src="${escapeHtml(icon)}" alt="" class="tile-favicon" onerror="this.style.display='none';this.parentElement.innerHTML='<span class=\\'material-symbols-outlined\\'>bookmark</span>'">`;
+  } else {
+    iconHtml = `<span class="material-symbols-outlined">${escapeHtml(icon)}</span>`;
+  }
+  
+  tile.innerHTML = `
+    <div class="tile-icon">
+      ${iconHtml}
+    </div>
+    <div class="tile-title">${escapeHtml(title)}</div>
+    <div class="tile-url">${getDomainFromUrl(bookmark.url)}</div>
+  `;
+  
+  tile.addEventListener('click', () => navigateTo(bookmark.url));
+  
+  return tile;
 }
 
 function renderHistory() {
@@ -1155,18 +1259,48 @@ function renderHistory() {
       <div class="empty-state">
         <span class="material-symbols-outlined">history</span>
         <p>No browsing history</p>
+        <p class="empty-hint">Sites you visit will appear here</p>
       </div>
     `;
     return;
   }
   
-  // Show last 20 items
-  state.history.slice(0, 20).forEach(url => {
-    const item = createListItem(getDomainFromUrl(url), url);
+  // Show last 30 items
+  state.history.slice(0, 30).forEach(url => {
+    const item = createHistoryItem(url);
     list.appendChild(item);
   });
   
   updateFocusableElements();
+}
+
+function createHistoryItem(url) {
+  const item = document.createElement('div');
+  item.className = 'list-item history-item';
+  item.dataset.focusable = '';
+  item.tabIndex = 0;
+  item.dataset.url = url;
+  
+  const domain = getDomainFromUrl(url);
+  const faviconUrl = getFaviconUrl(url);
+  
+  item.innerHTML = `
+    <div class="list-item-icon">
+      <img src="${escapeHtml(faviconUrl)}" alt="" class="list-item-favicon" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
+      <span class="material-symbols-outlined" style="display:none">public</span>
+    </div>
+    <div class="list-item-content">
+      <div class="list-item-title">${escapeHtml(domain)}</div>
+      <div class="list-item-meta">${escapeHtml(url)}</div>
+    </div>
+    <div class="list-item-action">
+      <span class="key-hint">A</span>
+    </div>
+  `;
+  
+  item.addEventListener('click', () => navigateTo(url));
+  
+  return item;
 }
 
 function renderRecentSites() {
@@ -1177,7 +1311,7 @@ function renderRecentSites() {
   
   if (state.history.length === 0) {
     container.innerHTML = `
-      <div class="empty-state">
+      <div class="empty-state compact">
         <span class="material-symbols-outlined">web</span>
         <p>Start browsing to see recent sites</p>
       </div>
@@ -1206,16 +1340,26 @@ function renderRecentSites() {
   updateFocusableElements();
 }
 
-function createTile(title, url, icon) {
+function createTile(title, url, icon, useFavicon = false) {
   const tile = document.createElement('div');
   tile.className = 'tile';
   tile.dataset.focusable = '';
   tile.tabIndex = 0;
   tile.dataset.url = url;
   
+  let iconHtml;
+  const isIconUrl = typeof icon === 'string' && /^(https?:|data:)/.test(icon);
+  
+  if (isIconUrl || useFavicon) {
+    const faviconUrl = isIconUrl ? icon : getFaviconUrl(url);
+    iconHtml = `<img src="${escapeHtml(faviconUrl)}" alt="" class="tile-favicon" onerror="this.style.display='none';this.parentElement.innerHTML='<span class=\\'material-symbols-outlined\\'>public</span>'">`;
+  } else {
+    iconHtml = `<span class="material-symbols-outlined">${escapeHtml(icon)}</span>`;
+  }
+  
   tile.innerHTML = `
     <div class="tile-icon">
-      <span class="material-symbols-outlined">${icon}</span>
+      ${iconHtml}
     </div>
     <div class="tile-title">${escapeHtml(title)}</div>
     <div class="tile-url">${getDomainFromUrl(url)}</div>
@@ -1224,6 +1368,15 @@ function createTile(title, url, icon) {
   tile.addEventListener('click', () => navigateTo(url));
   
   return tile;
+}
+
+function getFaviconUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    return `https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=64`;
+  } catch {
+    return '';
+  }
 }
 
 function createListItem(title, url) {
@@ -1258,9 +1411,12 @@ function createScrollCard(title, url) {
   card.tabIndex = 0;
   card.dataset.url = url;
   
+  const faviconUrl = getFaviconUrl(url);
+  
   card.innerHTML = `
     <div class="scroll-card-preview">
-      <span class="material-symbols-outlined" style="font-size: 48px; color: var(--bp-text-dim); display: flex; align-items: center; justify-content: center; height: 100%;">public</span>
+      <img src="${escapeHtml(faviconUrl)}" alt="" class="scroll-card-favicon" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <span class="material-symbols-outlined scroll-card-icon" style="display:none;font-size: 48px; color: var(--bp-text-dim); align-items: center; justify-content: center; height: 100%;">public</span>
     </div>
     <div class="scroll-card-title">${escapeHtml(title)}</div>
     <div class="scroll-card-meta">Recently visited</div>
@@ -1323,6 +1479,9 @@ function navigateTo(url) {
   state.currentWebview = webview;
   state.webviewContentsId = null; // Will be set when webview is ready
   
+  // Save initial URL to history
+  saveToHistory(url);
+  
   // Get webContentsId when webview is ready for native input events
   webview.addEventListener('dom-ready', () => {
     try {
@@ -1334,6 +1493,24 @@ function navigateTo(url) {
       injectInputFocusDetection(webview);
     } catch (err) {
       console.log('[BigPicture] Could not get webContentsId:', err);
+    }
+  });
+  
+  // Save navigation to history
+  webview.addEventListener('did-navigate', (event) => {
+    const newUrl = event.url;
+    if (newUrl && !newUrl.startsWith('about:')) {
+      saveToHistory(newUrl);
+    }
+  });
+  
+  // Also save history on in-page navigations (e.g., SPA navigations)
+  webview.addEventListener('did-navigate-in-page', (event) => {
+    if (event.isMainFrame) {
+      const newUrl = event.url;
+      if (newUrl && !newUrl.startsWith('about:')) {
+        saveToHistory(newUrl);
+      }
     }
   });
   
