@@ -56,6 +56,9 @@ const state = {
   cursorSpeed: 15,
   cursorElement: null,
   
+  // Sidebar visibility (for fullscreen webview)
+  sidebarHidden: false,
+  
   // OSK (On-Screen Keyboard)
   oskVisible: false,
   oskCallback: null,
@@ -190,8 +193,43 @@ function initNavigation() {
   });
 }
 
+// =============================================================================
+// SIDEBAR TOGGLE (for fullscreen webview)
+// =============================================================================
+
+function toggleSidebar() {
+  state.sidebarHidden = !state.sidebarHidden;
+  
+  const sidebar = document.querySelector('.bp-sidebar');
+  const content = document.querySelector('.bp-content');
+  const header = document.querySelector('.bp-header');
+  
+  if (state.sidebarHidden) {
+    sidebar?.classList.add('sidebar-hidden');
+    content?.classList.add('fullscreen');
+    header?.classList.add('sidebar-hidden');
+    showToast('📺 Fullscreen mode | Press ☰ to show sidebar');
+  } else {
+    sidebar?.classList.remove('sidebar-hidden');
+    content?.classList.remove('fullscreen');
+    header?.classList.remove('sidebar-hidden');
+    showToast('Sidebar restored');
+  }
+}
+
+function showSidebar() {
+  if (state.sidebarHidden) {
+    toggleSidebar();
+  }
+}
+
 function switchSection(sectionId) {
   console.log('[BigPicture] Switching to section:', sectionId);
+  
+  // Restore sidebar when leaving browse section
+  if (sectionId !== 'browse' && state.sidebarHidden) {
+    showSidebar();
+  }
   
   // Handle webview container visibility (preserve state instead of destroying)
   const webviewContainer = document.getElementById('webview-container');
@@ -239,6 +277,16 @@ function updateFocusableElements() {
       console.log('[BigPicture] OSK focusable elements:', state.focusableElements.length);
       return;
     }
+  }
+  
+  // When in webview mode, only sidebar navigation is available
+  if (state.cursorEnabled && state.currentWebview) {
+    state.focusableElements = [
+      ...document.querySelectorAll('.bp-sidebar [data-focusable]'),
+      ...document.querySelectorAll('.bp-header [data-focusable]')
+    ];
+    console.log('[BigPicture] Webview mode - sidebar focusable elements:', state.focusableElements.length);
+    return;
   }
   
   const activeSection = document.querySelector('.bp-section.active');
@@ -472,11 +520,15 @@ function handleGamepadInput(gamepad) {
   const stickLeft = leftX < -CONFIG.STICK_DEADZONE;
   const stickRight = leftX > CONFIG.STICK_DEADZONE;
   
-  // Combine inputs
-  const up = dpadUp || stickUp;
-  const down = dpadDown || stickDown;
-  const left = dpadLeft || stickLeft;
-  const right = dpadRight || stickRight;
+  // When cursor is enabled (viewing a webpage), only D-Pad navigates sidebar
+  // Left stick is ignored for UI navigation in webview mode
+  const inWebviewMode = state.cursorEnabled && state.currentWebview;
+  
+  // Combine inputs - but only use D-Pad when in webview mode
+  const up = inWebviewMode ? dpadUp : (dpadUp || stickUp);
+  const down = inWebviewMode ? dpadDown : (dpadDown || stickDown);
+  const left = inWebviewMode ? dpadLeft : (dpadLeft || stickLeft);
+  const right = inWebviewMode ? dpadRight : (dpadRight || stickRight);
   
   // Navigation with repeat prevention
   const now = Date.now();
@@ -509,7 +561,7 @@ function handleGamepadInput(gamepad) {
     state.lastInput.right = 0;
   }
   
-  // A button (usually index 0) - Select/Type letter
+  // A button (usually index 0) - Always select/activate focused menu item
   if (gamepad.buttons[0]?.pressed && !state.lastInput.a) {
     activateFocused();
     state.lastInput.a = true;
@@ -567,10 +619,22 @@ function handleGamepadInput(gamepad) {
     state.lastInput.rb = false;
   }
   
-  // Start button (usually index 9) - Menu
+  // Back/Select button (usually index 8) - Toggle sidebar when in webview
+  if (gamepad.buttons[8]?.pressed && !state.lastInput.select) {
+    if (state.currentSection === 'browse' && state.currentWebview) {
+      toggleSidebar();
+    }
+    state.lastInput.select = true;
+  } else if (!gamepad.buttons[8]?.pressed) {
+    state.lastInput.select = false;
+  }
+  
+  // Start button (usually index 9) - Menu / Toggle sidebar when viewing webpage
   if (gamepad.buttons[9]?.pressed && !state.lastInput.start) {
-    // Toggle to settings
-    if (state.currentSection !== 'settings') {
+    // If viewing a webpage, toggle sidebar instead of going to settings
+    if (state.currentSection === 'browse' && state.currentWebview) {
+      toggleSidebar();
+    } else if (state.currentSection !== 'settings') {
       switchSection('settings');
     } else {
       switchSection('home');
@@ -593,6 +657,15 @@ function handleGamepadInput(gamepad) {
     
     if (moveX !== 0 || moveY !== 0) {
       moveCursor(moveX * state.cursorSpeed, moveY * state.cursorSpeed);
+    }
+    
+    // Left stick for scrolling in webview mode
+    const scrollDeadzone = 0.25;
+    const scrollX = Math.abs(leftX) > scrollDeadzone ? leftX : 0;
+    const scrollY = Math.abs(leftY) > scrollDeadzone ? leftY : 0;
+    
+    if (scrollX !== 0 || scrollY !== 0) {
+      scrollWebview(scrollY * 20, scrollX * 20);
     }
     
     // Right trigger (index 7) - Left click
@@ -618,15 +691,6 @@ function handleGamepadInput(gamepad) {
       state.lastInput.rs = true;
     } else if (!gamepad.buttons[11]?.pressed) {
       state.lastInput.rs = false;
-    }
-    
-    // Left stick click (index 10) - Scroll mode toggle could go here
-    if (gamepad.buttons[10]?.pressed && !state.lastInput.ls) {
-      // Scroll the page
-      scrollWebview(leftY * 100);
-      state.lastInput.ls = true;
-    } else if (!gamepad.buttons[10]?.pressed) {
-      state.lastInput.ls = false;
     }
   }
 }
@@ -1222,8 +1286,11 @@ function enableCursor() {
   updateCursorPosition();
   state.cursorElement.classList.add('active');
   
+  // Update focusable elements to only include sidebar when in webview mode
+  updateFocusableElements();
+  
   // Show cursor hint
-  showToast('🎮 Right stick: Move cursor | RT: Click | LT: Right-click | B: Back');
+  showToast('🎮 Right stick: Move cursor | RT: Click | Left stick: Scroll | B: Back');
 }
 
 function disableCursor() {
@@ -1231,6 +1298,9 @@ function disableCursor() {
   if (state.cursorElement) {
     state.cursorElement.classList.remove('active');
   }
+  
+  // Restore full focusable elements
+  updateFocusableElements();
 }
 
 function moveCursor(dx, dy) {
@@ -1328,11 +1398,11 @@ function virtualClick(rightClick = false) {
   }
 }
 
-function scrollWebview(amount) {
+function scrollWebview(amountY, amountX = 0) {
   if (!state.currentWebview) return;
   
   try {
-    state.currentWebview.executeJavaScript(`window.scrollBy(0, ${amount})`);
+    state.currentWebview.executeJavaScript(`window.scrollBy(${amountX}, ${amountY})`);
   } catch (err) {
     console.log('[BigPicture] Scroll error:', err);
   }

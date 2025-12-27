@@ -1426,3 +1426,54 @@ body.fullscreen .bp-main {
   font-size: 0.7rem;
   color: var(--bp-text);
 }
+
+/* =============================================================================
+   SIDEBAR HIDDEN STATE (Fullscreen webview mode)
+   ============================================================================= */
+
+.bp-sidebar.sidebar-hidden {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  transition: all 0.3s ease-out;
+}
+
+.bp-sidebar {
+  transition: all 0.3s ease-out;
+}
+
+.bp-content.fullscreen {
+  margin-left: 0;
+  width: 100%;
+}
+
+.bp-header.sidebar-hidden .header-left {
+  opacity: 0.5;
+  transform: scale(0.9);
+  transition: all 0.3s ease;
+}
+
+/* Show sidebar toggle hint when in fullscreen */
+.bp-content.fullscreen::before {
+  content: '☰ Menu';
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(20, 20, 31, 0.8);
+  border: 1px solid var(--bp-border);
+  border-radius: var(--bp-radius-sm);
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  color: var(--bp-text-muted);
+  z-index: 100;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.bp-content.fullscreen:hover::before {
+  opacity: 1;
+}
