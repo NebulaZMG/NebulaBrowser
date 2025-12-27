@@ -6,6 +6,104 @@
 const ipcRenderer = window.electronAPI;
 
 // =============================================================================
+// SCROLL NORMALIZATION (consistent scroll speed across all sites)
+// =============================================================================
+
+const SCROLL_NORMALIZATION_CSS = `
+  /* Disable smooth scrolling behavior that some sites force */
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+  }
+  html, body {
+    scroll-behavior: auto !important;
+  }
+`;
+
+const SCROLL_NORMALIZATION_JS = `
+(function() {
+  if (window.__nebulaScrollNormalized) return;
+  window.__nebulaScrollNormalized = true;
+  
+  // Consistent scroll amount in pixels per wheel delta unit
+  const SCROLL_SPEED = 100;
+  
+  // Intercept wheel events to normalize scroll speed
+  document.addEventListener('wheel', function(e) {
+    // Don't interfere if modifier keys are pressed (zoom, horizontal scroll, etc.)
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    
+    // Get the scroll target
+    let target = e.target;
+    let scrollable = null;
+    
+    // Find the nearest scrollable element
+    while (target && target !== document.body && target !== document.documentElement) {
+      const style = window.getComputedStyle(target);
+      const overflowY = style.overflowY;
+      const overflowX = style.overflowX;
+      
+      if ((overflowY === 'auto' || overflowY === 'scroll') && target.scrollHeight > target.clientHeight) {
+        scrollable = target;
+        break;
+      }
+      if ((overflowX === 'auto' || overflowX === 'scroll') && target.scrollWidth > target.clientWidth && e.shiftKey) {
+        scrollable = target;
+        break;
+      }
+      target = target.parentElement;
+    }
+    
+    // If no scrollable container found, use the document
+    if (!scrollable) {
+      scrollable = document.scrollingElement || document.documentElement || document.body;
+    }
+    
+    // Calculate normalized scroll delta
+    // deltaMode: 0 = pixels, 1 = lines, 2 = pages
+    let deltaY = e.deltaY;
+    let deltaX = e.deltaX;
+    
+    if (e.deltaMode === 1) {
+      // Line mode - multiply by line height approximation
+      deltaY *= SCROLL_SPEED;
+      deltaX *= SCROLL_SPEED;
+    } else if (e.deltaMode === 2) {
+      // Page mode - multiply by viewport height
+      deltaY *= window.innerHeight;
+      deltaX *= window.innerWidth;
+    } else {
+      // Pixel mode - normalize to consistent speed
+      // Clamp the delta to prevent extremely fast scrolling from some sites
+      const sign = deltaY > 0 ? 1 : -1;
+      deltaY = sign * Math.min(Math.abs(deltaY), SCROLL_SPEED * 3);
+      
+      const signX = deltaX > 0 ? 1 : -1;
+      deltaX = signX * Math.min(Math.abs(deltaX), SCROLL_SPEED * 3);
+    }
+    
+    // Apply scroll
+    e.preventDefault();
+    scrollable.scrollBy({
+      top: deltaY,
+      left: e.shiftKey ? deltaX : 0,
+      behavior: 'auto'
+    });
+  }, { passive: false, capture: true });
+})();
+`;
+
+// Function to apply scroll normalization to a webview
+function applyScrollNormalization(webview) {
+  try {
+    webview.insertCSS(SCROLL_NORMALIZATION_CSS);
+    webview.executeJavaScript(SCROLL_NORMALIZATION_JS);
+    console.log('[BigPicture] Applied scroll normalization to webview');
+  } catch (err) {
+    console.warn('[BigPicture] Failed to apply scroll normalization:', err);
+  }
+}
+
+// =============================================================================
 // CONFIGURATION
 // =============================================================================
 
@@ -1488,6 +1586,9 @@ function navigateTo(url) {
       // getWebContentsId is available on webview element
       state.webviewContentsId = webview.getWebContentsId();
       console.log('[BigPicture] WebContents ID:', state.webviewContentsId);
+      
+      // Apply scroll normalization for consistent scroll speed
+      applyScrollNormalization(webview);
       
       // Inject script to detect input field focus and notify the host
       injectInputFocusDetection(webview);
