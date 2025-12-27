@@ -254,8 +254,16 @@
     <!-- On-screen keyboard (for controller input) -->
     <div id="osk-overlay" class="osk-overlay hidden">
       <div class="osk-container">
+        <div class="osk-title">
+          <span class="material-symbols-outlined">keyboard</span>
+          <span id="osk-label">Enter text</span>
+        </div>
         <div class="osk-header">
-          <input type="text" id="osk-input" class="osk-text-input" placeholder="Type with D-pad + A" readonly>
+          <div class="osk-input-wrapper">
+            <input type="text" id="osk-input" class="osk-text-input" placeholder="Your text appears here..." readonly>
+            <span id="osk-cursor" class="osk-cursor"></span>
+            <span id="osk-text-measure" class="osk-text-measure"></span>
+          </div>
           <button class="osk-close" data-focusable tabindex="0">
             <span class="material-symbols-outlined">close</span>
           </button>

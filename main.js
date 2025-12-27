@@ -204,6 +204,22 @@ ipcMain.on('exit-bigpicture', () => {
   exitBigPictureMode();
 });
 
+// IPC handler for sending mouse input events to webviews (used by Big Picture Mode)
+ipcMain.handle('webview-send-input-event', async (event, { webContentsId, inputEvent }) => {
+  try {
+    const { webContents: webContentsModule } = require('electron');
+    const targetWebContents = webContentsModule.fromId(webContentsId);
+    if (targetWebContents && !targetWebContents.isDestroyed()) {
+      targetWebContents.sendInputEvent(inputEvent);
+      return { success: true };
+    }
+    return { success: false, error: 'WebContents not found' };
+  } catch (err) {
+    console.error('[Main] webview-send-input-event error:', err);
+    return { success: false, error: err.message };
+  }
+});
+
 // =============================================================================
 
 

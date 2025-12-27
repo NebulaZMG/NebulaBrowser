@@ -127,7 +127,10 @@ contextBridge.exposeInMainWorld('bigPictureAPI', {
   // Exit Big Picture Mode
   exit: () => ipcRenderer.invoke('exit-bigpicture'),
   // Navigate to URL (from Big Picture Mode)
-  navigate: (url) => ipcRenderer.send('bigpicture-navigate', url)
+  navigate: (url) => ipcRenderer.send('bigpicture-navigate', url),
+  // Send input event to a webview (for virtual cursor clicks)
+  sendInputEvent: (webContentsId, inputEvent) => 
+    ipcRenderer.invoke('webview-send-input-event', { webContentsId, inputEvent })
 });
 
 // Relay context-menu commands from main to active renderer context (open new tabs etc.)

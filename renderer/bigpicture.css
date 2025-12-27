@@ -982,6 +982,22 @@ body.mouse-active {
   padding: var(--bp-spacing-lg);
 }
 
+.osk-title {
+  display: flex;
+  align-items: center;
+  gap: var(--bp-spacing-md);
+  margin-bottom: var(--bp-spacing-md);
+  color: var(--bp-accent);
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.osk-title .material-symbols-outlined {
+  font-size: 1.3rem;
+}
+
 .osk-header {
   display: flex;
   align-items: center;
@@ -989,19 +1005,67 @@ body.mouse-active {
   margin-bottom: var(--bp-spacing-md);
 }
 
+.osk-input-wrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--bp-bg);
+  border: 2px solid var(--bp-accent);
+  border-radius: var(--bp-radius-md);
+  box-shadow: 0 0 20px var(--bp-accent-glow);
+  overflow: hidden;
+}
+
 .osk-text-input {
   flex: 1;
   padding: var(--bp-spacing-md) var(--bp-spacing-lg);
-  background: var(--bp-bg);
-  border: 2px solid var(--bp-border);
-  border-radius: var(--bp-radius-md);
-  font-size: 1.2rem;
+  background: transparent;
+  border: none;
+  font-size: 1.3rem;
   color: var(--bp-text);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  outline: none;
 }
 
-.osk-text-input:focus {
-  outline: none;
-  border-color: var(--bp-accent);
+.osk-text-input::placeholder {
+  color: var(--bp-text-dim);
+}
+
+/* Blinking cursor that follows text */
+.osk-cursor {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 1.5em;
+  background: var(--bp-accent);
+  border-radius: 2px;
+  animation: blink-cursor 1s step-end infinite;
+  box-shadow: 0 0 8px var(--bp-accent);
+  pointer-events: none;
+  left: var(--bp-spacing-lg);
+}
+
+/* Hidden element to measure text width */
+.osk-text-measure {
+  position: absolute;
+  visibility: hidden;
+  white-space: pre;
+  font-size: 1.3rem;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  font-family: inherit;
+}
+
+@keyframes blink-cursor {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
 
 .osk-close {

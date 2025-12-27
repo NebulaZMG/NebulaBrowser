@@ -73,6 +73,7 @@ const state = {
   
   // Webview for browsing
   currentWebview: null,
+  webviewContentsId: null, // For native input event injection
   webviewStack: []  // Stack of webview instances for navigation history
 };
 
@@ -827,6 +828,7 @@ function initOSK() {
 function openOSK(mode = 'search') {
   const overlay = document.getElementById('osk-overlay');
   const input = document.getElementById('osk-input');
+  const label = document.getElementById('osk-label');
   
   if (!overlay || !input) return;
   
@@ -836,6 +838,14 @@ function openOSK(mode = 'search') {
   
   // Clear input
   input.value = '';
+  
+  // Reset cursor position
+  updateOSKCursorPosition();
+  
+  // Update label based on mode
+  if (label) {
+    label.textContent = mode === 'search' ? 'Search or enter URL' : 'Enter text';
+  }
   
   // Update focusable elements to only include OSK keys
   updateFocusableElements();
@@ -853,6 +863,51 @@ function openOSK(mode = 'search') {
       }
     }
   }, 100);
+}
+
+/**
+ * Open OSK for typing into a focused input field in the webview
+ */
+function openOSKForWebview() {
+  const overlay = document.getElementById('osk-overlay');
+  const input = document.getElementById('osk-input');
+  const label = document.getElementById('osk-label');
+  
+  if (!overlay || !input) return;
+  
+  state.oskVisible = true;
+  state.oskMode = 'webview'; // Special mode for webview input
+  overlay.classList.remove('hidden');
+  
+  // Clear input (could optionally preserve current input value)
+  input.value = '';
+  
+  // Reset cursor position
+  updateOSKCursorPosition();
+  
+  // Update the label to indicate webview mode
+  if (label) {
+    label.textContent = 'Type your text';
+  }
+  
+  // Update focusable elements to only include OSK keys
+  updateFocusableElements();
+  
+  // Focus first key
+  setTimeout(() => {
+    const firstKey = overlay.querySelector('.osk-key');
+    if (firstKey) {
+      const index = state.focusableElements.indexOf(firstKey);
+      if (index !== -1) {
+        state.focusIndex = index;
+        focusElement(firstKey);
+      } else {
+        firstKey.focus();
+      }
+    }
+  }, 100);
+  
+  showToast('📝 Type and press Submit to enter text');
 }
 
 function closeOSK() {
@@ -873,6 +928,7 @@ function appendToOSK(char) {
   const input = document.getElementById('osk-input');
   if (input) {
     input.value += char;
+    updateOSKCursorPosition();
   }
 }
 
@@ -880,6 +936,7 @@ function backspaceOSK() {
   const input = document.getElementById('osk-input');
   if (input && input.value.length > 0) {
     input.value = input.value.slice(0, -1);
+    updateOSKCursorPosition();
     playNavSound();
   }
 }
@@ -888,21 +945,96 @@ function clearOSK() {
   const input = document.getElementById('osk-input');
   if (input) {
     input.value = '';
+    updateOSKCursorPosition();
     playNavSound();
   }
 }
 
+/**
+ * Update the blinking cursor position to follow the text
+ */
+function updateOSKCursorPosition() {
+  const input = document.getElementById('osk-input');
+  const cursor = document.getElementById('osk-cursor');
+  const measure = document.getElementById('osk-text-measure');
+  
+  if (!input || !cursor || !measure) return;
+  
+  // Copy the input text to the measure element
+  measure.textContent = input.value || '';
+  
+  // Get the text width + padding offset
+  const textWidth = measure.offsetWidth;
+  const paddingLeft = 32; // var(--bp-spacing-lg) = 32px
+  
+  // Position cursor right after the text
+  cursor.style.left = `${paddingLeft + textWidth}px`;
+}
+
 function submitOSK() {
   const input = document.getElementById('osk-input');
-  if (!input || !input.value.trim()) return;
+  if (!input) return;
   
-  const value = input.value.trim();
+  const value = input.value;
   
   if (state.oskMode === 'search') {
-    performSearch(value);
+    if (!value.trim()) return;
+    performSearch(value.trim());
+  } else if (state.oskMode === 'webview' && state.currentWebview) {
+    // Send the typed text to the webview's focused input
+    sendTextToWebview(value, true); // true = submit after setting
   }
   
   closeOSK();
+}
+
+/**
+ * Send typed text from OSK to the focused input field in webview
+ */
+function sendTextToWebview(text, submit = false) {
+  if (!state.currentWebview) return;
+  
+  try {
+    // Send the text value to the webview
+    const script = submit ? `
+      (function() {
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+          activeEl.value = ${JSON.stringify(text)};
+          activeEl.dispatchEvent(new Event('input', { bubbles: true }));
+          activeEl.dispatchEvent(new Event('change', { bubbles: true }));
+          
+          // Trigger Enter key to submit
+          setTimeout(() => {
+            activeEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+            activeEl.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', keyCode: 13, bubbles: true }));
+            activeEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
+            
+            // Also try form submission
+            const form = activeEl.closest('form');
+            if (form) {
+              const submitBtn = form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+              if (submitBtn) submitBtn.click();
+            }
+          }, 50);
+        }
+      })();
+    ` : `
+      (function() {
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+          activeEl.value = ${JSON.stringify(text)};
+          activeEl.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      })();
+    `;
+    
+    state.currentWebview.executeJavaScript(script).catch(err => {
+      console.log('[BigPicture] Send text error:', err);
+    });
+  } catch (err) {
+    console.log('[BigPicture] sendTextToWebview error:', err);
+  }
 }
 
 function handleOSKKeyboard(e) {
@@ -1189,6 +1321,30 @@ function navigateTo(url) {
   
   container.appendChild(webview);
   state.currentWebview = webview;
+  state.webviewContentsId = null; // Will be set when webview is ready
+  
+  // Get webContentsId when webview is ready for native input events
+  webview.addEventListener('dom-ready', () => {
+    try {
+      // getWebContentsId is available on webview element
+      state.webviewContentsId = webview.getWebContentsId();
+      console.log('[BigPicture] WebContents ID:', state.webviewContentsId);
+      
+      // Inject script to detect input field focus and notify the host
+      injectInputFocusDetection(webview);
+    } catch (err) {
+      console.log('[BigPicture] Could not get webContentsId:', err);
+    }
+  });
+  
+  // Listen for IPC messages from webview (for OSK requests)
+  webview.addEventListener('ipc-message', (event) => {
+    if (event.channel === 'bigpicture-input-focused') {
+      // Input field was clicked/focused in webview - show OSK for webview input
+      console.log('[BigPicture] Input focused in webview');
+      openOSKForWebview();
+    }
+  });
   
   // Enable virtual cursor for webview interaction
   enableCursor();
@@ -1200,6 +1356,80 @@ function navigateTo(url) {
   setTimeout(() => {
     updateFocusableElements();
   }, 100);
+}
+
+/**
+ * Inject script to detect input focus in webview and send message to host
+ */
+function injectInputFocusDetection(webview) {
+  const script = `
+    (function() {
+      if (window.__bigPictureInputDetection) return;
+      window.__bigPictureInputDetection = true;
+      
+      // Track the last focused input
+      let lastFocusedInput = null;
+      
+      document.addEventListener('focusin', (e) => {
+        const el = e.target;
+        const isInput = el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ||
+                       el.contentEditable === 'true' || el.isContentEditable ||
+                       el.getAttribute('role') === 'textbox' || el.getAttribute('role') === 'searchbox';
+        
+        // Check input type - exclude non-text inputs
+        if (el.tagName === 'INPUT') {
+          const type = el.type.toLowerCase();
+          if (['checkbox', 'radio', 'submit', 'button', 'image', 'file', 'hidden', 'reset', 'range', 'color'].includes(type)) {
+            return;
+          }
+        }
+        
+        if (isInput) {
+          lastFocusedInput = el;
+          // Send message to host (Big Picture Mode) to show OSK
+          try {
+            if (window.electronAPI && window.electronAPI.sendToHost) {
+              window.electronAPI.sendToHost('bigpicture-input-focused', {
+                type: el.tagName,
+                inputType: el.type || 'text',
+                value: el.value || ''
+              });
+            }
+          } catch(e) {
+            console.log('BigPicture: Could not notify input focus', e);
+          }
+        }
+      }, true);
+      
+      // Listen for text input from OSK
+      window.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'bigpicture-osk-input' && lastFocusedInput) {
+          lastFocusedInput.value = e.data.value;
+          lastFocusedInput.dispatchEvent(new Event('input', { bubbles: true }));
+          lastFocusedInput.dispatchEvent(new Event('change', { bubbles: true }));
+        } else if (e.data && e.data.type === 'bigpicture-osk-submit' && lastFocusedInput) {
+          // Submit the form or trigger search
+          const form = lastFocusedInput.closest('form');
+          if (form) {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            // Also try clicking any submit button
+            const submitBtn = form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+            if (submitBtn) submitBtn.click();
+          }
+          // Trigger Enter key event
+          lastFocusedInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+          lastFocusedInput.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', keyCode: 13, bubbles: true }));
+          lastFocusedInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
+        }
+      });
+      
+      console.log('[BigPicture] Input focus detection injected');
+    })();
+  `;
+  
+  webview.executeJavaScript(script).catch(err => {
+    console.log('[BigPicture] Could not inject input detection:', err);
+  });
 }
 
 function exitBigPictureMode() {
@@ -1334,8 +1564,8 @@ function virtualClick(rightClick = false) {
   const containerRect = container.getBoundingClientRect();
   
   // Calculate position relative to webview
-  const x = state.cursorX - containerRect.left;
-  const y = state.cursorY - containerRect.top;
+  const x = Math.round(state.cursorX - containerRect.left);
+  const y = Math.round(state.cursorY - containerRect.top);
   
   // Show click animation
   if (state.cursorElement) {
@@ -1343,56 +1573,191 @@ function virtualClick(rightClick = false) {
     setTimeout(() => state.cursorElement.classList.remove('clicking'), 150);
   }
   
-  // Send mouse event to webview
-  try {
-    const webContents = state.currentWebview;
+  const webview = state.currentWebview;
+  
+  // Try to use native input event injection via IPC (most reliable for complex sites)
+  if (state.webviewContentsId && window.bigPictureAPI && window.bigPictureAPI.sendInputEvent) {
+    const sendNativeClick = async () => {
+      try {
+        // Send mouseMove first to position the cursor
+        await window.bigPictureAPI.sendInputEvent(state.webviewContentsId, {
+          type: 'mouseMove',
+          x: x,
+          y: y
+        });
+        
+        // Small delay then send mouseDown
+        await new Promise(r => setTimeout(r, 10));
+        
+        await window.bigPictureAPI.sendInputEvent(state.webviewContentsId, {
+          type: 'mouseDown',
+          x: x,
+          y: y,
+          button: rightClick ? 'right' : 'left',
+          clickCount: 1
+        });
+        
+        // Small delay then send mouseUp
+        await new Promise(r => setTimeout(r, 50));
+        
+        await window.bigPictureAPI.sendInputEvent(state.webviewContentsId, {
+          type: 'mouseUp',
+          x: x,
+          y: y,
+          button: rightClick ? 'right' : 'left',
+          clickCount: 1
+        });
+        
+        console.log('[BigPicture] Native click sent at', x, y);
+      } catch (err) {
+        console.log('[BigPicture] Native input error, falling back to JS:', err);
+        fallbackJavaScriptClick(webview, x, y, rightClick);
+      }
+    };
     
-    // Use executeJavaScript to simulate click at coordinates
-    const clickScript = rightClick ? `
-      (function() {
-        const el = document.elementFromPoint(${x}, ${y});
-        if (el) {
-          const event = new MouseEvent('contextmenu', {
-            bubbles: true,
-            cancelable: true,
-            clientX: ${x},
-            clientY: ${y},
-            button: 2
-          });
-          el.dispatchEvent(event);
-        }
-      })();
-    ` : `
-      (function() {
-        const el = document.elementFromPoint(${x}, ${y});
-        if (el) {
-          // Try to focus if it's an input
-          if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.contentEditable === 'true') {
-            el.focus();
-          }
-          // Simulate full click sequence
-          const rect = el.getBoundingClientRect();
-          const events = ['mousedown', 'mouseup', 'click'];
-          events.forEach(type => {
-            const event = new MouseEvent(type, {
+    sendNativeClick();
+    return;
+  }
+  
+  // Fallback to JavaScript injection
+  fallbackJavaScriptClick(webview, x, y, rightClick);
+}
+
+function fallbackJavaScriptClick(webview, x, y, rightClick) {
+  try {
+    if (rightClick) {
+      // For right-click, use JavaScript injection
+      const rightClickScript = `
+        (function() {
+          const el = document.elementFromPoint(${x}, ${y});
+          if (el) {
+            const event = new MouseEvent('contextmenu', {
               bubbles: true,
               cancelable: true,
-              view: window,
               clientX: ${x},
               clientY: ${y},
-              button: 0
+              button: 2
             });
             el.dispatchEvent(event);
-          });
-          // Also try clicking directly for links and buttons
-          if (el.click) el.click();
-        }
-      })();
-    `;
-    
-    webContents.executeJavaScript(clickScript).catch(err => {
-      console.log('[BigPicture] Click injection error:', err);
-    });
+          }
+        })();
+      `;
+      webview.executeJavaScript(rightClickScript).catch(err => {
+        console.log('[BigPicture] Right-click injection error:', err);
+      });
+    } else {
+      // Comprehensive JavaScript injection with pointer events
+      const clickScript = `
+        (function() {
+          const x = ${x};
+          const y = ${y};
+          const el = document.elementFromPoint(x, y);
+          if (!el) return;
+          
+          // Check if we're clicking on YouTube player area
+          const isYouTubePlayer = el.closest('.html5-video-player') || 
+                                  el.closest('.ytp-player') ||
+                                  el.closest('#movie_player') ||
+                                  el.closest('.html5-main-video') ||
+                                  el.closest('.video-stream') ||
+                                  (window.location.hostname.includes('youtube.com') && 
+                                   (el.tagName === 'VIDEO' || el.closest('#player')));
+          
+          if (isYouTubePlayer) {
+            // For YouTube player, directly toggle playback
+            const video = document.querySelector('video.html5-main-video') || 
+                         document.querySelector('video.video-stream') ||
+                         document.querySelector('#movie_player video') ||
+                         document.querySelector('video');
+            if (video) {
+              if (video.paused) {
+                video.play().catch(() => {});
+              } else {
+                video.pause();
+              }
+              return;
+            }
+          }
+          
+          // Find the actual clickable element (may be parent)
+          let clickTarget = el;
+          let current = el;
+          for (let i = 0; i < 10 && current; i++) {
+            if (current.tagName === 'A' || current.tagName === 'BUTTON' || 
+                current.onclick || current.getAttribute('role') === 'button' ||
+                window.getComputedStyle(current).cursor === 'pointer') {
+              clickTarget = current;
+              break;
+            }
+            current = current.parentElement;
+          }
+          
+          // Common event options
+          const eventOptions = {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: x,
+            clientY: y,
+            screenX: x,
+            screenY: y,
+            button: 0,
+            buttons: 1,
+            pointerId: 1,
+            pointerType: 'mouse',
+            isPrimary: true,
+            pressure: 0.5,
+            width: 1,
+            height: 1
+          };
+          
+          // Handle input elements specially - focus first
+          const isInput = el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || 
+                         el.contentEditable === 'true' || el.isContentEditable ||
+                         el.getAttribute('role') === 'textbox' || el.getAttribute('role') === 'searchbox' ||
+                         el.closest('[contenteditable="true"]');
+          
+          if (isInput) {
+            // Focus the input element
+            el.focus();
+            // Dispatch proper focus sequence
+            el.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
+            el.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+            // Dispatch click to activate any click handlers
+            el.dispatchEvent(new MouseEvent('click', eventOptions));
+            return;
+          }
+          
+          // For general video elements (not YouTube specific)
+          if (el.tagName === 'VIDEO') {
+            if (el.paused) {
+              el.play().catch(() => {});
+            } else {
+              el.pause();
+            }
+            return;
+          }
+          
+          // Dispatch pointer events (used by modern sites)
+          try {
+            clickTarget.dispatchEvent(new PointerEvent('pointerdown', eventOptions));
+            clickTarget.dispatchEvent(new PointerEvent('pointerup', eventOptions));
+          } catch(e) {}
+          
+          // Dispatch mouse events
+          clickTarget.dispatchEvent(new MouseEvent('mousedown', eventOptions));
+          clickTarget.dispatchEvent(new MouseEvent('mouseup', eventOptions));
+          clickTarget.dispatchEvent(new MouseEvent('click', eventOptions));
+          
+          // Direct click as final fallback
+          if (clickTarget.click) clickTarget.click();
+        })();
+      `;
+      
+      webview.executeJavaScript(clickScript).catch(err => {
+        console.log('[BigPicture] Click injection error:', err);
+      });
+    }
   } catch (err) {
     console.log('[BigPicture] Virtual click error:', err);
   }
