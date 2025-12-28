@@ -42,3 +42,7 @@ Notes
 - `--no-sandbox` reduces Chromium sandboxing; prefer fixing `chrome-sandbox` and enabling sandboxing when possible.
 - Using the AppDir avoids AppImage/FUSE dependency on target systems.
 - Test on a clean SteamOS/Deck image before publishing.
+
+Big Picture auto-start (SteamOS Gaming Mode)
+- If Nebula is launched from SteamOS Gaming Mode, it will auto-start in Big Picture Mode.
+- To force/disable via Steam Launch Options: `--big-picture` or `--no-big-picture`.
