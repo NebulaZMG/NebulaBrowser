@@ -1,17 +1,241 @@
 // preload.js - Optimized version
 const { contextBridge, ipcRenderer } = require('electron');
 let pathModule;
+let fsModule;
 try {
   pathModule = require('path');
+  fsModule = require('fs');
 } catch (err) {
   pathModule = null;
+  fsModule = null;
 }
+
+// =============================================================================
+// GAMEPAD HANDLER - Steam Deck / SteamOS Support
+// =============================================================================
+// This is CRITICAL for Steam Deck Game Mode: Steam only stops applying
+// Desktop mouse emulation when the app actively reads controller input.
+// By continuously polling navigator.getGamepads(), Steam recognizes that
+// the app is consuming gamepad events and backs off the mouse emulation layer.
+// =============================================================================
+
+const gamepadState = {
+  initialized: false,
+  gamepads: {},
+  connectedCount: 0,
+  activeGamepadIndex: null,
+  rafId: null,
+  buttonStates: {},
+  listeners: { connect: [], disconnect: [], button: [], axis: [], input: [] },
+};
+
+const GAMEPAD_CONFIG = {
+  STICK_DEADZONE: 0.15,
+  DEBUG: false,
+};
+
+function gamepadLog(...args) {
+  if (GAMEPAD_CONFIG.DEBUG) {
+    console.log('[NebulaGamepad]', ...args);
+  }
+}
+
+function initGamepadHandler() {
+  if (gamepadState.initialized) return;
+  
+  if (typeof navigator === 'undefined' || !navigator.getGamepads) {
+    console.warn('[NebulaGamepad] Gamepad API not available');
+    return;
+  }
+  
+  gamepadLog('Initializing gamepad handler');
+  
+  window.addEventListener('gamepadconnected', handleGamepadConnected);
+  window.addEventListener('gamepaddisconnected', handleGamepadDisconnected);
+  
+  // Initial scan for already-connected gamepads
+  scanGamepads();
+  
+  // Start polling loop - this is what tells Steam we're consuming gamepad input
+  startGamepadPolling();
+  
+  gamepadState.initialized = true;
+  console.log('[NebulaGamepad] Gamepad handler initialized - Steam will see controller input being consumed');
+}
+
+function handleGamepadConnected(event) {
+  const gamepad = event.gamepad;
+  gamepadLog('Gamepad connected:', gamepad.index, gamepad.id);
+  
+  gamepadState.gamepads[gamepad.index] = {
+    id: gamepad.id,
+    index: gamepad.index,
+    connected: true,
+    mapping: gamepad.mapping,
+    timestamp: Date.now(),
+  };
+  gamepadState.connectedCount++;
+  
+  if (gamepadState.activeGamepadIndex === null) {
+    gamepadState.activeGamepadIndex = gamepad.index;
+  }
+  
+  gamepadState.buttonStates[gamepad.index] = {};
+  emitGamepadEvent('connect', { gamepad, index: gamepad.index, id: gamepad.id });
+}
+
+function handleGamepadDisconnected(event) {
+  const gamepad = event.gamepad;
+  gamepadLog('Gamepad disconnected:', gamepad.index, gamepad.id);
+  
+  if (gamepadState.gamepads[gamepad.index]) {
+    delete gamepadState.gamepads[gamepad.index];
+    gamepadState.connectedCount--;
+  }
+  
+  delete gamepadState.buttonStates[gamepad.index];
+  
+  if (gamepadState.activeGamepadIndex === gamepad.index) {
+    gamepadState.activeGamepadIndex = null;
+    const gamepads = navigator.getGamepads();
+    for (let i = 0; i < gamepads.length; i++) {
+      if (gamepads[i]) {
+        gamepadState.activeGamepadIndex = i;
+        break;
+      }
+    }
+  }
+  
+  emitGamepadEvent('disconnect', { index: gamepad.index, id: gamepad.id });
+}
+
+function scanGamepads() {
+  const gamepads = navigator.getGamepads();
+  for (let i = 0; i < gamepads.length; i++) {
+    const gamepad = gamepads[i];
+    if (gamepad && !gamepadState.gamepads[gamepad.index]) {
+      gamepadLog('Found pre-connected gamepad:', gamepad.index, gamepad.id);
+      gamepadState.gamepads[gamepad.index] = {
+        id: gamepad.id,
+        index: gamepad.index,
+        connected: true,
+        mapping: gamepad.mapping,
+        timestamp: Date.now(),
+      };
+      gamepadState.connectedCount++;
+      if (gamepadState.activeGamepadIndex === null) {
+        gamepadState.activeGamepadIndex = gamepad.index;
+      }
+      gamepadState.buttonStates[gamepad.index] = {};
+    }
+  }
+}
+
+function startGamepadPolling() {
+  if (gamepadState.rafId !== null) return;
+  
+  function pollLoop(timestamp) {
+    // CRITICAL: This call to getGamepads() tells Steam we're consuming gamepad input
+    const gamepads = navigator.getGamepads();
+    
+    for (let i = 0; i < gamepads.length; i++) {
+      const gamepad = gamepads[i];
+      if (gamepad) {
+        processGamepadInput(gamepad);
+      }
+    }
+    
+    // Periodic scan for newly connected gamepads
+    if (timestamp % 1000 < 20) {
+      scanGamepads();
+    }
+    
+    gamepadState.rafId = requestAnimationFrame(pollLoop);
+  }
+  
+  gamepadState.rafId = requestAnimationFrame(pollLoop);
+  gamepadLog('Started gamepad polling');
+}
+
+function processGamepadInput(gamepad) {
+  const index = gamepad.index;
+  const buttonState = gamepadState.buttonStates[index] || {};
+  let hasInput = false;
+  
+  // Process buttons
+  for (let i = 0; i < gamepad.buttons.length; i++) {
+    const button = gamepad.buttons[i];
+    const wasPressed = buttonState[`b${i}`] || false;
+    const isPressed = button.pressed || button.value > 0.5;
+    
+    if (isPressed !== wasPressed) {
+      buttonState[`b${i}`] = isPressed;
+      hasInput = true;
+      emitGamepadEvent('button', { gamepad, index, button: i, pressed: isPressed, value: button.value });
+    }
+  }
+  
+  // Process axes
+  for (let i = 0; i < gamepad.axes.length; i++) {
+    const value = gamepad.axes[i];
+    const prevValue = buttonState[`a${i}`] || 0;
+    
+    if (Math.abs(value - prevValue) > 0.01) {
+      buttonState[`a${i}`] = value;
+      if (Math.abs(value) > GAMEPAD_CONFIG.STICK_DEADZONE) {
+        hasInput = true;
+        emitGamepadEvent('axis', { gamepad, index, axis: i, value });
+      }
+    }
+  }
+  
+  gamepadState.buttonStates[index] = buttonState;
+  
+  if (hasInput) {
+    emitGamepadEvent('input', { gamepad, index });
+  }
+}
+
+function emitGamepadEvent(type, data) {
+  // Dispatch as CustomEvent for renderer scripts to listen to
+  try {
+    window.dispatchEvent(new CustomEvent(`nebula-gamepad-${type}`, { detail: data }));
+  } catch (err) {
+    // Ignore errors if CustomEvent isn't available
+  }
+}
+
+function getActiveGamepad() {
+  if (gamepadState.activeGamepadIndex === null) return null;
+  const gamepads = navigator.getGamepads();
+  return gamepads[gamepadState.activeGamepadIndex] || null;
+}
+
+function getConnectedGamepads() {
+  const gamepads = navigator.getGamepads();
+  return Array.from(gamepads).filter(gp => gp !== null);
+}
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+  if (gamepadState.rafId !== null) {
+    cancelAnimationFrame(gamepadState.rafId);
+    gamepadState.rafId = null;
+  }
+});
+
+// =============================================================================
+// DOM READY & INITIALIZATION
+// =============================================================================
 
 // Cache DOM references for performance
 let domReady = false;
 window.addEventListener('DOMContentLoaded', () => {
   domReady = true;
   console.log("Browser UI loaded.");
+  
+  // Initialize gamepad handler for Steam Deck/SteamOS support
+  initGamepadHandler();
 });
 
 // Optimized API exposure with error handling and caching
@@ -137,6 +361,55 @@ const bookmarksAPI = {
 // Expose APIs to main world
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 contextBridge.exposeInMainWorld('bookmarksAPI', bookmarksAPI);
+
+// Gamepad API - Access to the gamepad handler running in the preload context
+// The handler actively polls navigator.getGamepads() to signal to Steam that
+// the app is consuming controller input (prevents mouse emulation on Steam Deck)
+contextBridge.exposeInMainWorld('gamepadAPI', {
+  // Check if gamepad handler is initialized
+  isAvailable: () => gamepadState.initialized,
+  
+  // Check if any gamepad is connected
+  isConnected: () => gamepadState.connectedCount > 0,
+  
+  // Get connected gamepads info
+  getConnected: () => {
+    const gamepads = getConnectedGamepads();
+    return gamepads.map(gp => ({
+      id: gp.id,
+      index: gp.index,
+      mapping: gp.mapping,
+      buttons: gp.buttons.length,
+      axes: gp.axes.length,
+    }));
+  },
+  
+  // Get the active gamepad's current state
+  getActive: () => {
+    const gp = getActiveGamepad();
+    if (!gp) return null;
+    return {
+      id: gp.id,
+      index: gp.index,
+      mapping: gp.mapping,
+      buttons: Array.from(gp.buttons).map((b, i) => ({ index: i, pressed: b.pressed, value: b.value })),
+      axes: Array.from(gp.axes),
+    };
+  },
+  
+  // Enable debug mode
+  setDebug: (enabled) => {
+    GAMEPAD_CONFIG.DEBUG = !!enabled;
+  },
+  
+  // Get handler state for debugging
+  getState: () => ({
+    initialized: gamepadState.initialized,
+    connectedCount: gamepadState.connectedCount,
+    activeGamepadIndex: gamepadState.activeGamepadIndex,
+    isPolling: gamepadState.rafId !== null,
+  }),
+});
 
 // Minimal about API for settings page
 contextBridge.exposeInMainWorld('aboutAPI', {

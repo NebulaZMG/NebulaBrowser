@@ -654,6 +654,13 @@ function initGamepadSupport() {
     return;
   }
 
+  // The global gamepad handler (from gamepad-handler.js injected via preload)
+  // already polls navigator.getGamepads() continuously. This is what tells Steam
+  // that we're consuming gamepad input and it should stop mouse emulation.
+  // Big Picture Mode handles the actual UI navigation and button actions.
+  
+  console.log('[BigPicture] Global gamepad handler available:', !!window.__nebulaGamepadHandler);
+
   // Note: On Linux (and some controllers like handheld integrated gamepads),
   // the `gamepadconnected` event may not fire until the first button press,
   // or at all. We rely on continuous polling for robustness.
