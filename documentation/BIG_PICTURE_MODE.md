@@ -2,6 +2,13 @@
 
 Nebula Browser includes a **Big Picture Mode** - a controller-friendly, console-style interface designed for Steam Deck, handheld devices, and living room setups.
 
+## 🚀 Single Window Architecture
+
+Big Picture Mode now opens **in the main window** instead of a separate window. This design:
+- **Keeps resources low** - No extra Electron window process
+- **Prevents SteamOS conflicts** - When auto-launching in Gaming Mode, Steam won't create a desktop mode alongside, preventing Steam from overriding controls to emulate keyboard/mouse
+- **Seamless switching** - Navigate between Desktop and Big Picture modes smoothly
+
 ## ⚠️ Steam Deck: Disabling Mouse Emulation
 
 If Steam is emulating mouse/keyboard input with the joysticks (overriding native controller support), you need to configure Steam Input:
@@ -129,10 +136,13 @@ const suggested = await window.bigPictureAPI.isSuggested();
 // Get screen information
 const info = await window.bigPictureAPI.getScreenInfo();
 
-// Launch Big Picture Mode
+// Check if currently in Big Picture Mode
+const isActive = await window.bigPictureAPI.isActive();
+
+// Launch Big Picture Mode (navigates main window)
 await window.bigPictureAPI.launch();
 
-// Exit Big Picture Mode
+// Exit Big Picture Mode (navigates back to desktop UI)
 await window.bigPictureAPI.exit();
 ```
 

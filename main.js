@@ -322,7 +322,8 @@ const STEAM_DECK_WIDTH = 1280;
 const STEAM_DECK_HEIGHT = 800;
 const HANDHELD_THRESHOLD = 1366; // Consider screens smaller than this as "handheld"
 
-let bigPictureWindow = null;
+// Track if main window is currently in Big Picture Mode (no separate window anymore)
+let isInBigPictureMode = false;
 
 /**
  * Check if the current display is likely a Steam Deck or similar handheld
@@ -362,89 +363,78 @@ function getScreenInfo() {
 }
 
 /**
- * Create Big Picture Mode window
+ * Launch Big Picture Mode in the main window (no separate window)
+ * This keeps resources low and prevents SteamOS from creating desktop mode alongside.
  */
-function createBigPictureWindow() {
-  if (bigPictureWindow && !bigPictureWindow.isDestroyed()) {
-    bigPictureWindow.focus();
-    return bigPictureWindow;
+function launchBigPictureMode() {
+  const windows = BrowserWindow.getAllWindows();
+  const mainWindow = windows[0];
+  
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    console.warn('[BigPicture] No main window available');
+    return null;
   }
-
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
-
-  bigPictureWindow = new BrowserWindow({
-    width: width,
-    height: height,
-    fullscreen: true,
-    frame: false,
-    show: false,
-    backgroundColor: '#0a0a0f',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-      webviewTag: true,
-      spellcheck: false,
-      webSecurity: true,
-    },
-    icon: process.platform === 'darwin'
-      ? path.join(__dirname, 'assets/images/Logos/Nebula-Favicon.icns')
-      : path.join(__dirname, 'assets/images/Logos/Nebula-favicon.png'),
-    title: 'Nebula - Big Picture Mode'
-  });
-
-  bigPictureWindow.loadFile('renderer/bigpicture.html');
-
-  bigPictureWindow.once('ready-to-show', () => {
-    bigPictureWindow.show();
-    
-    // Apply saved display scale to big picture window
-    try {
-      const configPath = path.join(app.getPath('userData'), 'localStorage');
-      const dbPath = path.join(configPath, 'leveldb');
-      // Note: localStorage will be applied via CSS in bigpicture.js since it reads from localStorage directly
-      // The IPC handler will apply setZoomFactor when adjustments are made
-      console.log('[BigPicture] Window ready - display scale will be applied from localStorage');
-    } catch (err) {
-      console.warn('[BigPicture] Failed to apply saved display scale on ready:', err);
-    }
-    
-    console.log('[BigPicture] Window ready');
-  });
-
-  bigPictureWindow.on('closed', () => {
-    bigPictureWindow = null;
-    console.log('[BigPicture] Window closed');
-  });
-
-  return bigPictureWindow;
+  
+  if (isInBigPictureMode) {
+    console.log('[BigPicture] Already in Big Picture Mode');
+    mainWindow.focus();
+    return mainWindow;
+  }
+  
+  isInBigPictureMode = true;
+  
+  // Enter fullscreen for Big Picture experience
+  mainWindow.setFullScreen(true);
+  mainWindow.setTitle('Nebula - Big Picture Mode');
+  
+  // Navigate to Big Picture UI
+  mainWindow.loadFile('renderer/bigpicture.html');
+  
+  console.log('[BigPicture] Launched in main window');
+  return mainWindow;
 }
 
 /**
- * Exit Big Picture Mode and return to desktop UI
+ * Exit Big Picture Mode and return to desktop UI in the same window
  */
 function exitBigPictureMode() {
-  if (bigPictureWindow && !bigPictureWindow.isDestroyed()) {
-    bigPictureWindow.close();
-    bigPictureWindow = null;
+  const windows = BrowserWindow.getAllWindows();
+  const mainWindow = windows[0];
+  
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    console.warn('[BigPicture] No main window to exit from');
+    return;
   }
   
-  // Ensure main window exists and is focused
-  const windows = BrowserWindow.getAllWindows();
-  const mainWindow = windows.find(w => w !== bigPictureWindow);
-  if (mainWindow) {
-    mainWindow.focus();
-  } else if (windows.length === 0) {
-    createWindow();
+  if (!isInBigPictureMode) {
+    console.log('[BigPicture] Not in Big Picture Mode');
+    return;
   }
+  
+  isInBigPictureMode = false;
+  
+  // Exit fullscreen and restore normal window
+  mainWindow.setFullScreen(false);
+  mainWindow.setTitle('Nebula');
+  
+  // Navigate back to desktop UI
+  mainWindow.loadFile('renderer/index.html');
+  
+  // Maximize on Windows after exiting fullscreen
+  if (process.platform === 'win32') {
+    setTimeout(() => {
+      try { mainWindow.maximize(); } catch {}
+    }, 100);
+  }
+  
+  console.log('[BigPicture] Exited to desktop mode');
 }
 
 // IPC handlers for Big Picture Mode
 ipcMain.handle('get-screen-info', () => getScreenInfo());
 
 ipcMain.handle('launch-bigpicture', () => {
-  createBigPictureWindow();
+  launchBigPictureMode();
   return { success: true };
 });
 
@@ -455,6 +445,11 @@ ipcMain.handle('exit-bigpicture', () => {
 
 ipcMain.handle('is-bigpicture-suggested', () => {
   return isSteamDeckDisplay();
+});
+
+// Check if currently in Big Picture Mode
+ipcMain.handle('is-in-bigpicture', () => {
+  return isInBigPictureMode;
 });
 
 ipcMain.on('exit-bigpicture', () => {
@@ -480,9 +475,14 @@ ipcMain.handle('webview-send-input-event', async (event, { webContentsId, inputE
 // =============================================================================
 
 
-function createWindow(startUrl) {
+function createWindow(startUrl, bigPictureMode = false) {
   // Capture high‑resolution startup timing markers
   const perfMarks = { createWindow_called: performance.now() };
+
+  // Track Big Picture Mode state if starting in that mode
+  if (bigPictureMode) {
+    isInBigPictureMode = true;
+  }
 
   // Get the available screen size (avoid full workArea allocation jank by starting slightly smaller then maximizing later if desired)
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -491,11 +491,11 @@ function createWindow(startUrl) {
 
   // Window is created hidden; we only show after first meaningful paint to avoid OS‑level pointer jank while Chromium initializes
   let windowOptions = {
-    width: initialWidth,
-    height: initialHeight,
+    width: bigPictureMode ? width : initialWidth,
+    height: bigPictureMode ? height : initialHeight,
     show: false,
     useContentSize: true,
-    backgroundColor: '#121212', // avoids white flash & early extra paints
+    backgroundColor: bigPictureMode ? '#0a0a0f' : '#121212', // Big Picture uses darker bg
     resizable: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -517,7 +517,7 @@ function createWindow(startUrl) {
       partition: 'persist:main',
       sandbox: false
     },
-    fullscreen: false,
+    fullscreen: bigPictureMode, // Start in fullscreen for Big Picture Mode
     autoHideMenuBar: true,
     icon: process.platform === 'darwin'
       ? path.join(__dirname, 'assets/images/Logos/Nebula-Favicon.icns')
@@ -621,7 +621,13 @@ function createWindow(startUrl) {
     });
   });
 
-  win.loadFile('renderer/index.html');
+  // Load appropriate UI based on mode (Big Picture or Desktop)
+  if (bigPictureMode) {
+    win.loadFile('renderer/bigpicture.html');
+    win.setTitle('Nebula - Big Picture Mode');
+  } else {
+    win.loadFile('renderer/index.html');
+  }
   perfMarks.loadFile_issued = performance.now();
 
   // if caller passed in a URL, forward it to the renderer after load
@@ -762,11 +768,11 @@ app.whenReady().then(() => {
   const t0 = performance.now();
 
   // If launched via SteamOS Gaming Mode / gamepad UI, default to Big Picture Mode.
-  // Desktop launches remain unchanged.
+  // Desktop launches remain unchanged. Big Picture now opens in main window to keep resources low.
   const startInBigPicture = shouldStartInBigPictureMode();
   if (startInBigPicture) {
-    console.log('[Startup] Detected game mode launch; starting in Big Picture Mode');
-    createBigPictureWindow();
+    console.log('[Startup] Detected game mode launch; starting in Big Picture Mode (in main window)');
+    createWindow(null, true); // Pass bigPictureMode flag
   } else {
     createWindow();
   }

@@ -442,14 +442,18 @@ contextBridge.exposeInMainWorld('aboutAPI', {
 });
 
 // Big Picture Mode API - Steam Deck / Console UI
+// Note: Big Picture Mode now opens in the main window (not a separate window) to keep resources low
+// and prevent SteamOS from creating desktop mode alongside when auto-launching.
 contextBridge.exposeInMainWorld('bigPictureAPI', {
   // Get screen info to determine if Big Picture Mode is recommended
   getScreenInfo: () => ipcRenderer.invoke('get-screen-info'),
   // Check if device is likely a Steam Deck or handheld
   isSuggested: () => ipcRenderer.invoke('is-bigpicture-suggested'),
-  // Launch Big Picture Mode
+  // Check if currently in Big Picture Mode
+  isActive: () => ipcRenderer.invoke('is-in-bigpicture'),
+  // Launch Big Picture Mode (navigates main window to Big Picture UI)
   launch: () => ipcRenderer.invoke('launch-bigpicture'),
-  // Exit Big Picture Mode
+  // Exit Big Picture Mode (navigates main window back to desktop UI)
   exit: () => ipcRenderer.invoke('exit-bigpicture'),
   // Navigate to URL (from Big Picture Mode)
   navigate: (url) => ipcRenderer.send('bigpicture-navigate', url),
