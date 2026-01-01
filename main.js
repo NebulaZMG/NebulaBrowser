@@ -539,9 +539,11 @@ function createWindow(startUrl, bigPictureMode = false) {
       transparent: true,
     });
   } else if (process.platform === 'win32') {
+    // Use frameless window on Windows with custom title bar controls
+    // rendered in the tab strip area (Firefox-style).
     Object.assign(windowOptions, {
-      frame: true, // Use default Windows title bar.
-      // removed titleBarOverlay to restore native Windows controls.
+      frame: false,
+      backgroundColor: '#0b0d10',
     });
   } else {
     windowOptions.frame = true;
@@ -931,6 +933,9 @@ ipcMain.handle('window-maximize', event => {
 });
 ipcMain.handle('window-close', event => {
   BrowserWindow.fromWebContents(event.sender).close();
+});
+ipcMain.handle('window-is-maximized', event => {
+  return BrowserWindow.fromWebContents(event.sender).isMaximized();
 });
 
 // Add site and search history IPC handlers

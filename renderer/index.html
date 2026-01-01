@@ -25,7 +25,30 @@
   </style>
 </head>
 <body>
-  <div id="tab-bar"></div>
+  <!-- Windows title bar controls wrapper - sits above tab bar -->
+  <div id="titlebar-container">
+    <div id="tab-bar"></div>
+    <div id="window-controls">
+      <button id="min-btn" title="Minimize" aria-label="Minimize">
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <path d="M0 5h10" stroke="currentColor" stroke-width="1" fill="none"/>
+        </svg>
+      </button>
+      <button id="max-btn" title="Maximize" aria-label="Maximize">
+        <svg width="10" height="10" viewBox="0 0 10 10" class="maximize-icon">
+          <rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" stroke-width="1" fill="none"/>
+        </svg>
+        <svg width="10" height="10" viewBox="0 0 10 10" class="restore-icon" style="display:none">
+          <path d="M2.5 0.5h7v7M0.5 2.5h7v7h-7z" stroke="currentColor" stroke-width="1" fill="none"/>
+        </svg>
+      </button>
+      <button id="close-btn" title="Close" aria-label="Close">
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <path d="M0 0l10 10M10 0l-10 10" stroke="currentColor" stroke-width="1" fill="none"/>
+        </svg>
+      </button>
+    </div>
+  </div>
 
   <div id="nav">
     <div class="nav-left">

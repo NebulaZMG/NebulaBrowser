@@ -128,24 +128,110 @@ function addToSiteHistory(url) {
   }
 }
 
+// Store current theme colors globally for use by renderTabs
+let currentThemeColors = null;
+
 // Apply theme colors to the main UI (URL bar and tabs)
 function applyThemeToMainUI(theme) {
   if (!theme || !theme.colors) return;
-  
   const root = document.documentElement;
+  const colors = theme.colors;
   
-  // Apply URL bar and tab colors
-  if (theme.colors.urlBarBg) root.style.setProperty('--url-bar-bg', theme.colors.urlBarBg);
-  if (theme.colors.urlBarText) root.style.setProperty('--url-bar-text', theme.colors.urlBarText);
-  if (theme.colors.urlBarBorder) root.style.setProperty('--url-bar-border', theme.colors.urlBarBorder);
-  if (theme.colors.tabBg) root.style.setProperty('--tab-bg', theme.colors.tabBg);
-  if (theme.colors.tabText) root.style.setProperty('--tab-text', theme.colors.tabText);
-  if (theme.colors.tabActive) root.style.setProperty('--tab-active', theme.colors.tabActive);
-  if (theme.colors.tabActiveText) root.style.setProperty('--tab-active-text', theme.colors.tabActiveText);
-  if (theme.colors.tabBorder) root.style.setProperty('--tab-border', theme.colors.tabBorder);
+  // Store colors globally for renderTabs to use
+  currentThemeColors = colors;
+
+  // Set CSS variables on root for elements using var()
+  const setVar = (cssVar, value, fallback) => {
+    const val = value || fallback;
+    if (val) root.style.setProperty(cssVar, val);
+  };
+
+  // Core palette so popups/menus and the address bar stay in sync
+  setVar('--bg', colors.bg, '#0b0d10');
+  setVar('--dark-blue', colors.darkBlue, '#0b1c2b');
+  setVar('--dark-purple', colors.darkPurple, '#1b1035');
+  setVar('--primary', colors.primary, '#7b2eff');
+  setVar('--accent', colors.accent, '#00c6ff');
+  setVar('--text', colors.text, '#e0e0e0');
+
+  // URL bar + tab strip styling
+  setVar('--url-bar-bg', colors.urlBarBg, '#1c2030');
+  setVar('--url-bar-text', colors.urlBarText, '#e0e0e0');
+  setVar('--url-bar-border', colors.urlBarBorder, '#3e4652');
+  setVar('--tab-bg', colors.tabBg, '#161925');
+  setVar('--tab-text', colors.tabText, '#a4a7b3');
+  setVar('--tab-active', colors.tabActive, '#1c2030');
+  setVar('--tab-active-text', colors.tabActiveText, '#e0e0e0');
+  setVar('--tab-border', colors.tabBorder, '#2b3040');
+
+  // Also directly apply to key elements to ensure styles take effect
+  const nav = document.getElementById('nav');
+  const titlebarContainer = document.getElementById('titlebar-container');
+  const tabBar = document.getElementById('tab-bar');
+  const urlBox = document.getElementById('url');
+  const navCenter = document.querySelector('.nav-center');
   
-  console.log('[THEME] Applied theme colors to main UI');
+  if (nav) {
+    nav.style.setProperty('background', colors.urlBarBg || '#1c2030', 'important');
+    nav.style.setProperty('border-bottom-color', colors.urlBarBorder || '#3e4652', 'important');
+  }
+  if (navCenter) {
+    navCenter.style.setProperty('background', colors.urlBarBg || '#1c2030', 'important');
+    navCenter.style.setProperty('border-color', colors.urlBarBorder || '#3e4652', 'important');
+  }
+  if (titlebarContainer) {
+    titlebarContainer.style.setProperty('background', colors.tabBg || '#161925', 'important');
+  }
+  if (tabBar) {
+    tabBar.style.setProperty('background', colors.tabBg || '#161925', 'important');
+    tabBar.style.setProperty('border-bottom-color', colors.tabBorder || '#2b3040', 'important');
+  }
+  if (urlBox) {
+    urlBox.style.setProperty('color', colors.urlBarText || '#e0e0e0', 'important');
+  }
+
+  // Update existing tab elements to reflect new theme colors
+  document.querySelectorAll('.tab').forEach(tab => {
+    const isActive = tab.classList.contains('active');
+    tab.style.setProperty('background', isActive 
+      ? (colors.tabActive || '#1c2030')
+      : (colors.tabBg || '#161925'), 'important');
+    tab.style.setProperty('color', isActive
+      ? (colors.tabActiveText || '#e0e0e0')
+      : (colors.tabText || '#a4a7b3'), 'important');
+    tab.style.setProperty('border-color', colors.tabBorder || '#2b3040', 'important');
+  });
+
+  // Align the chrome background with the theme gradient or fallback
+  if (theme.gradient) {
+    document.body.style.background = theme.gradient;
+  } else if (colors.bg) {
+    document.body.style.background = colors.bg;
+  }
+
+  // Persist so other pages (home/settings) can pull the latest palette
+  try { localStorage.setItem('currentTheme', JSON.stringify(theme)); } catch {}
+
+  console.log('[THEME] Applied theme to main UI:', {
+    urlBarBg: colors.urlBarBg,
+    tabBg: colors.tabBg,
+    navFound: !!nav,
+    titlebarFound: !!titlebarContainer,
+    tabBarFound: !!tabBar
+  });
 }
+
+// Detect platform and add class to body for CSS platform-specific styling
+(function detectPlatform() {
+  const platform = navigator.platform.toLowerCase();
+  if (platform.includes('mac')) {
+    document.body.classList.add('platform-darwin');
+  } else if (platform.includes('win')) {
+    document.body.classList.add('platform-win32');
+  } else {
+    document.body.classList.add('platform-linux');
+  }
+})();
 
 // 1) cache hot DOM references
 const urlBox       = document.getElementById('url');
@@ -729,6 +815,8 @@ function convertHomeTabToWebview(tabId, inputUrl, resolvedUrl) {
   // After creating dynamic webview:
   webview.addEventListener('ipc-message', e => {
     if (e.channel === 'theme-update') {
+      const theme = e.args && e.args[0];
+      if (theme) applyThemeToMainUI(theme);
       const home = document.getElementById('home-webview');
       if (home) home.send('theme-update', ...e.args);
     } else if (e.channel === 'navigate' && e.args[0]) {
@@ -907,6 +995,18 @@ function renderTabs() {
     el.setAttribute('tabindex', tab.id === activeTabId ? '0' : '-1');
     el.dataset.tabId = tab.id;
     currentOrder.push(tab.id);
+    
+    // Apply theme colors to new tab element
+    if (currentThemeColors) {
+      const isActive = tab.id === activeTabId;
+      el.style.setProperty('background', isActive 
+        ? (currentThemeColors.tabActive || '#1c2030')
+        : (currentThemeColors.tabBg || '#161925'), 'important');
+      el.style.setProperty('color', isActive
+        ? (currentThemeColors.tabActiveText || '#e0e0e0')
+        : (currentThemeColors.tabText || '#a4a7b3'), 'important');
+      el.style.setProperty('border-color', currentThemeColors.tabBorder || '#2b3040', 'important');
+    }
 
     if (!lastTabOrder.includes(tab.id)) {
       // New tab enters with animation
@@ -1215,6 +1315,18 @@ window.addEventListener('DOMContentLoaded', () => {
     try {
       const theme = JSON.parse(savedTheme);
       applyThemeToMainUI(theme);
+      // Also send to home-webview once it's ready
+      const homeWebview = document.getElementById('home-webview');
+      if (homeWebview) {
+        const sendThemeToHome = () => {
+          try { homeWebview.send('theme-update', theme); } catch {}
+        };
+        // If already loaded, send immediately; otherwise wait for dom-ready
+        if (homeWebview.getWebContentsId) {
+          sendThemeToHome();
+        }
+        homeWebview.addEventListener('dom-ready', sendThemeToHome, { once: true });
+      }
     } catch (err) {
       console.error('Error applying saved theme:', err);
     }
@@ -1371,17 +1483,71 @@ window.addEventListener('DOMContentLoaded', () => {
   window.downloadsAPI?.onDone(()=> { refreshDownloadsMini(); });
   window.downloadsAPI?.onCleared(()=> { refreshDownloadsMini(); });
 
-  // window control bindings
+  // window control bindings (Windows frameless window)
   const minBtn   = document.getElementById('min-btn');
   const maxBtn   = document.getElementById('max-btn');
   const closeBtn = document.getElementById('close-btn');
-  if (minBtn && maxBtn && closeBtn) {
-    if (process.platform !== 'darwin') {
-      minBtn.addEventListener('click', () => ipcRenderer.invoke('window-minimize'));
-      maxBtn.addEventListener('click', () => ipcRenderer.invoke('window-maximize'));
-      closeBtn.addEventListener('click', () => ipcRenderer.invoke('window-close'));
-    } else {
-      document.getElementById('window-controls').style.display = 'none';
+  const windowControls = document.getElementById('window-controls');
+  
+  console.log('[WindowControls] Elements found:', { minBtn: !!minBtn, maxBtn: !!maxBtn, closeBtn: !!closeBtn, windowControls: !!windowControls });
+  
+  // Detect platform - hide controls on macOS (uses native traffic lights)
+  const isMacOS = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  console.log('[WindowControls] Platform:', navigator.platform, 'isMacOS:', isMacOS);
+  
+  if (windowControls) {
+    if (isMacOS) {
+      // Hide window controls on macOS
+      windowControls.style.display = 'none';
+      // Remove right padding for window controls
+      document.getElementById('tab-bar').style.paddingRight = '10px';
+    } else if (minBtn && maxBtn && closeBtn) {
+      // Windows/Linux: Set up custom title bar controls
+      console.log('[WindowControls] Setting up event listeners for Windows/Linux');
+      
+      minBtn.addEventListener('click', (e) => {
+        console.log('[WindowControls] Minimize clicked');
+        e.stopPropagation();
+        ipcRenderer.invoke('window-minimize');
+      });
+      maxBtn.addEventListener('click', async (e) => {
+        console.log('[WindowControls] Maximize clicked');
+        e.stopPropagation();
+        await ipcRenderer.invoke('window-maximize');
+        updateMaximizeIcon();
+      });
+      closeBtn.addEventListener('click', (e) => {
+        console.log('[WindowControls] Close clicked');
+        e.stopPropagation();
+        ipcRenderer.invoke('window-close');
+      });
+      
+      // Update maximize icon based on window state
+      async function updateMaximizeIcon() {
+        try {
+          const isMaximized = await ipcRenderer.invoke('window-is-maximized');
+          const maximizeIcon = maxBtn.querySelector('.maximize-icon');
+          const restoreIcon = maxBtn.querySelector('.restore-icon');
+          if (maximizeIcon && restoreIcon) {
+            maximizeIcon.style.display = isMaximized ? 'none' : 'block';
+            restoreIcon.style.display = isMaximized ? 'block' : 'none';
+            maxBtn.title = isMaximized ? 'Restore' : 'Maximize';
+            maxBtn.setAttribute('aria-label', isMaximized ? 'Restore' : 'Maximize');
+          }
+        } catch (e) {
+          // Ignore errors during state check
+        }
+      }
+      
+      // Initial state check
+      updateMaximizeIcon();
+      
+      // Listen for window resize to update maximize icon
+      window.addEventListener('resize', () => {
+        // Debounce resize events
+        clearTimeout(window._maximizeIconTimeout);
+        window._maximizeIconTimeout = setTimeout(updateMaximizeIcon, 100);
+      });
     }
   }
 
