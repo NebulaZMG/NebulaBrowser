@@ -196,7 +196,6 @@ function applyDisplayScale(scalePercent, reason = 'unknown') {
     } else {
       applyCssZoom(zoomFactor);
     }
-    applyCssZoom(zoomFactor);
     console.log(`[BigPicture] Applied display scale ${clampedPercent}% (zoom=${zoomFactor}) via ${reason}`);
   } catch (err) {
     console.warn('[BigPicture] Failed applying display scale:', err);
