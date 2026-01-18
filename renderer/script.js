@@ -254,6 +254,7 @@ urlBox.addEventListener('keydown', (e) => {
 
 let tabs = [];
 let activeTabId = null;
+let isHistoryNavigation = false; // Flag to prevent duplicate history entries during back/forward
 const allowedInternalPages = ['settings', 'home', 'downloads', 'nebot', 'insecure'];
 // Session-scoped allowlist of HTTP hosts the user explicitly chose to proceed with.
 const insecureBypassedHosts = new Set();
@@ -843,8 +844,8 @@ function convertHomeTabToWebview(tabId, inputUrl, resolvedUrl) {
   tab.isHome = false;
   tab.webview = webview;
   tab.url = inputUrl;
-  tab.history = [inputUrl];
-  tab.historyIndex = 0;
+  // Keep existing history (including home) - the new URL will be added by handleNavigation when webview loads
+  // Don't modify historyIndex here - handleNavigation will handle it
 
   // Hide home container and show webview
   const homeContainer = document.getElementById('home-container');
@@ -864,10 +865,19 @@ function handleNavigation(tabId, newUrl) {
   debug('[DEBUG] handleNavigation called with:', newUrl);
 
   // --- record every real navigation into history ---
-  if (tab.history[tab.historyIndex] !== newUrl) {
-    tab.history = tab.history.slice(0, tab.historyIndex + 1);
-    tab.history.push(newUrl);
-    tab.historyIndex++;
+  // Skip adding to history if this is a programmatic back/forward navigation
+  if (!isHistoryNavigation) {
+    // Check both current position AND last recorded URL to prevent duplicates from
+    // multiple event firings (did-navigate + did-navigate-in-page)
+    const lastRecordedUrl = tab.history[tab.history.length - 1];
+    if (tab.history[tab.historyIndex] !== newUrl && lastRecordedUrl !== newUrl) {
+      tab.history = tab.history.slice(0, tab.historyIndex + 1);
+      tab.history.push(newUrl);
+      tab.historyIndex++;
+    }
+  } else {
+    // Reset flag after handling the navigation
+    isHistoryNavigation = false;
   }
 
   // Record site history in localStorage (skip internal pages and file:// URLs)
@@ -904,6 +914,25 @@ function handleNavigation(tabId, newUrl) {
               : newUrl;
 
   tab.url = displayUrl;
+
+  // Clear favicon and reset title for internal nebula:// pages
+  if (displayUrl.startsWith('nebula://')) {
+    tab.favicon = null;
+    // Set appropriate title for each internal page
+    if (isHome) {
+      tab.title = 'New Tab';
+    } else if (isSettings) {
+      tab.title = 'Settings';
+    } else if (isDownloads) {
+      tab.title = 'Downloads';
+    } else if (isNebot) {
+      tab.title = 'Nebot';
+    } else if (isInsecure) {
+      tab.title = 'Insecure Connection';
+    } else if (is404) {
+      tab.title = 'Page Not Found';
+    }
+  }
 
   if (tabId === activeTabId) {
     urlBox.value = displayUrl === 'nebula://home' ? '' : displayUrl;
@@ -1202,27 +1231,112 @@ ipcRenderer.on('open-url', (url) => {
 });
 
 function goBack() {
-  const webview = document.getElementById(`tab-${activeTabId}`);
-  if (webview && webview.canGoBack()) {
-    webview.goBack();
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (!tab) return;
+  
+  // Use custom history tracking to properly handle internal pages like home
+  if (tab.historyIndex > 0) {
+    tab.historyIndex--;
+    const targetUrl = tab.history[tab.historyIndex];
+    
+    // Special handling for nebula://home - convert webview tab back to home tab
+    if (targetUrl === 'nebula://home') {
+      const homeContainer = document.getElementById('home-container');
+      const webviewsEl = document.getElementById('webviews');
+      const webview = document.getElementById(`tab-${activeTabId}`);
+      
+      // Remove the webview if it exists
+      if (webview) {
+        webview.remove();
+      }
+      
+      // Convert tab back to home tab
+      tab.isHome = true;
+      tab.url = targetUrl;
+      delete tab.webview;
+      
+      // Show home container
+      if (homeContainer) homeContainer.classList.add('active');
+      if (webviewsEl) webviewsEl.classList.add('hidden');
+      
+      urlBox.value = '';
+      scheduleRenderTabs();
+      scheduleUpdateNavButtons();
+      return;
+    }
+    
+    const webview = document.getElementById(`tab-${activeTabId}`);
+    if (webview) {
+      isHistoryNavigation = true; // Prevent adding to history during programmatic navigation
+      // Resolve internal URLs (nebula://) to actual file paths
+      const resolvedUrl = resolveInternalUrl(targetUrl);
+      webview.loadURL(resolvedUrl);
+    }
   }
 }
 
 function goForward() {
-  const webview = document.getElementById(`tab-${activeTabId}`);
-  if (webview && webview.canGoForward()) {
-    webview.goForward();
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (!tab) return;
+  
+  // Use custom history tracking to properly handle internal pages like home
+  if (tab.historyIndex < tab.history.length - 1) {
+    tab.historyIndex++;
+    const targetUrl = tab.history[tab.historyIndex];
+    
+    // Special handling for nebula://home - it doesn't use a webview
+    if (targetUrl === 'nebula://home') {
+      const homeContainer = document.getElementById('home-container');
+      const webviewsEl = document.getElementById('webviews');
+      const webview = document.getElementById(`tab-${activeTabId}`);
+      
+      // Remove the webview if it exists
+      if (webview) {
+        webview.remove();
+      }
+      
+      // Convert tab back to home tab
+      tab.isHome = true;
+      tab.url = targetUrl;
+      delete tab.webview;
+      
+      // Show home container
+      if (homeContainer) homeContainer.classList.add('active');
+      if (webviewsEl) webviewsEl.classList.add('hidden');
+      
+      urlBox.value = '';
+      scheduleRenderTabs();
+      scheduleUpdateNavButtons();
+      return;
+    }
+    
+    // Check if we're currently on home and need to create a webview
+    if (tab.isHome && targetUrl !== 'nebula://home') {
+      // We're going forward from home to a webview page
+      const resolvedUrl = resolveInternalUrl(targetUrl);
+      convertHomeTabToWebview(activeTabId, targetUrl, resolvedUrl);
+      return;
+    }
+    
+    const webview = document.getElementById(`tab-${activeTabId}`);
+    if (webview) {
+      isHistoryNavigation = true; // Prevent adding to history during programmatic navigation
+      // Resolve internal URLs (nebula://) to actual file paths
+      const resolvedUrl = resolveInternalUrl(targetUrl);
+      webview.loadURL(resolvedUrl);
+    }
   }
 }
 
 function updateNavButtons() {
-  const webview = document.getElementById(`tab-${activeTabId}`);
+  const tab = tabs.find(t => t.id === activeTabId);
   if (!backBtnCached || !fwdBtnCached) {
     backBtnCached = document.querySelector('.nav-left button:nth-child(1)');
     fwdBtnCached  = document.querySelector('.nav-left button:nth-child(2)');
   }
-  if (backBtnCached) backBtnCached.disabled = !webview || !webview.canGoBack();
-  if (fwdBtnCached)  fwdBtnCached.disabled  = !webview || !webview.canGoForward();
+  // Use custom history tracking for button state
+  if (backBtnCached) backBtnCached.disabled = !tab || tab.historyIndex <= 0;
+  if (fwdBtnCached)  fwdBtnCached.disabled  = !tab || tab.historyIndex >= tab.history.length - 1;
 }
 
 function reload() {
@@ -1451,14 +1565,9 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // wire up back/forward buttons
-  const backBtn = document.querySelector('.nav-left button:nth-child(1)');
-  const forwardBtn = document.querySelector('.nav-left button:nth-child(2)');
-  backBtn.addEventListener('click', goBack);
-  forwardBtn.addEventListener('click', goForward);
-  // cache for faster updates
-  backBtnCached = backBtn;
-  fwdBtnCached = forwardBtn;
+  // Cache back/forward buttons for faster updates (no need to add listeners - already in HTML)
+  backBtnCached = document.querySelector('.nav-left button:nth-child(1)');
+  fwdBtnCached = document.querySelector('.nav-left button:nth-child(2)');
 
   // settings button
   const settingsBtn = document.getElementById('open-settings-btn');
