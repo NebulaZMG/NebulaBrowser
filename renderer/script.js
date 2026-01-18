@@ -1029,6 +1029,9 @@ function renderTabs() {
       const icon = document.createElement('img');
       icon.src = tab.favicon;
       icon.className = 'tab-favicon';
+      icon.onerror = function() {
+        this.style.display = 'none';
+      };
       el.appendChild(icon);
     }
 
