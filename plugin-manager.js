@@ -130,7 +130,7 @@ class PluginManager {
       contributeContextMenu: (contribFn) => {
         try { manager._contextMenuContribs.push(contribFn); } catch (e) { console.error(logPrefix, 'contributeContextMenu failed', e); }
       },
-      // Register a dedicated internal page (shown via browser://<id>)
+      // Register a dedicated internal page (shown via nebula://<id>)
     registerRendererPage: ({ id, html }) => {
         try {
           if (!id || !html) return;

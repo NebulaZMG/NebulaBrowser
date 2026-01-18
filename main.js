@@ -1630,7 +1630,7 @@ ipcMain.handle('plugins-get-renderer-preloads', () => {
   try { return pluginManager.getRendererPreloads(); } catch { return []; }
 });
 
-// Plugins: expose registered internal pages (browser://<id>)
+// Plugins: expose registered internal pages (nebula://<id>)
 ipcMain.handle('plugins-get-pages', () => {
   try { return pluginManager.getRendererPages(); } catch { return []; }
 });

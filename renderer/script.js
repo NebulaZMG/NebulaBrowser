@@ -285,7 +285,7 @@ window.addEventListener('message', (e) => {
   }
 });
 
-// Fetch plugin-provided pages (browser://<id>) once on startup
+// Fetch plugin-provided pages (nebula://<id>) once on startup
 (async () => {
   try {
     console.log('[DEBUG] About to request plugin pages from main process...');
@@ -350,7 +350,7 @@ function getTabLabel(tab) {
   if (u.startsWith('data:')) return 'Data';
   if (u.startsWith('blob:')) return 'Resource';
     if (u.startsWith('http')) return new URL(u).hostname;
-    if (u.startsWith('browser://')) return u.replace('browser://', '');
+    if (u.startsWith('nebula://')) return u.replace('nebula://', '');
     return u || 'New Tab';
   } catch {
     return u || 'New Tab';
@@ -400,10 +400,10 @@ ipcRenderer.on('open-url-new-tab', (url) => {
 // Auto-open on download start is disabled by design now.
 
 function createTab(inputUrl) {
-  inputUrl = inputUrl || 'browser://home';
+  inputUrl = inputUrl || 'nebula://home';
   console.log('[DEBUG] createTab() inputUrl =', inputUrl);
   const id = crypto.randomUUID();
-  if (inputUrl.startsWith('browser://') && !pluginPagesReady) {
+  if (inputUrl.startsWith('nebula://') && !pluginPagesReady) {
     // Defer creation until plugin pages known to avoid 404 race
     console.log('[DEBUG] Deferring createTab until pluginPagesReady');
     pendingInternalNavigations.push(() => createTab(inputUrl));
@@ -411,7 +411,7 @@ function createTab(inputUrl) {
   }
   
   // Handle home page specially
-  if (inputUrl === 'browser://home') {
+  if (inputUrl === 'nebula://home') {
     // Show home container and hide webviews
     const homeContainer = document.getElementById('home-container');
     const webviewsEl = document.getElementById('webviews');
@@ -482,7 +482,7 @@ function createTab(inputUrl) {
     // Apply scroll normalization to all sites for consistent scrolling
     applyScrollNormalization(webview);
     
-    if (inputUrl === 'browser://home') {
+    if (inputUrl === 'nebula://home') {
       webview.executeJavaScript(`
         if (window.receiveBookmarks) {
           window.receiveBookmarks(${JSON.stringify(bookmarks)});
@@ -566,7 +566,7 @@ function createTab(inputUrl) {
 
   tabs.push({
     id,
-    url: inputUrl, // ← save the original input like "browser://home"
+    url: inputUrl, // ← save the original input like "nebula://home"
     title: 'New Tab',
     favicon: null,
     history: [inputUrl],
@@ -584,13 +584,13 @@ try { window.createTab = createTab; } catch {}
 
 function resolveInternalUrl(url) {
   console.log('[DEBUG] resolveInternalUrl called with:', url);
-  if (url.startsWith('browser://')) {
-    // Support query / hash on internal pages (e.g., browser://insecure?target=...)
-    const tail = url.replace('browser://', '');
+  if (url.startsWith('nebula://')) {
+    // Support query / hash on internal pages (e.g., nebula://insecure?target=...)
+    const tail = url.replace('nebula://', '');
     const page = tail.split(/[?#]/)[0];
     const suffix = tail.slice(page.length); // includes ? and/or # if present
     console.log('[DEBUG] Extracted page:', page);
-    // Fast path: if user typed browser://nebot and plugin page exists, return immediately
+    // Fast path: if user typed nebula://nebot and plugin page exists, return immediately
     if (page === 'nebot') {
       const nebotPage = pluginPages.find(p => p.id === 'nebot');
       console.log('[DEBUG] Fast path for nebot, pluginPages:', pluginPages, 'nebotPage:', nebotPage);
@@ -605,7 +605,7 @@ function resolveInternalUrl(url) {
     if (allowedInternalPages.includes(page)) {
       // Check if this page is provided by a plugin (absolute file path)
       const plug = pluginPages.find(p => p.id === page);
-      console.log('[DEBUG] Resolving browser://' + page, 'plug:', plug);
+      console.log('[DEBUG] Resolving nebula://' + page, 'plug:', plug);
       if (plug && (plug.fileUrl || plug.file)) {
         // Prefer pre-built fileUrl for correctness across platforms
         const resolved = plug.fileUrl ? plug.fileUrl : (plug.file.startsWith('file://') ? plug.file : 'file://' + plug.file.replace(/\\/g,'/'));
@@ -628,7 +628,7 @@ function resolveInternalUrl(url) {
 
 function handleLoadFail(tabId) {
   return (event) => {
-    if (!event.validatedURL.includes('browser://') && event.errorCode !== -3) {
+    if (!event.validatedURL.includes('nebula://') && event.errorCode !== -3) {
       const webview = document.getElementById(`tab-${tabId}`);
       webview.src = `404.html?url=${encodeURIComponent(tabs.find(t => t.id === tabId).url)}`;
     }
@@ -649,7 +649,7 @@ function performNavigation(input, originalInputForHistory) {
   const hasProtocol = /^https?:\/\//i.test(input);
   const isFileProtocol = /^file:\/\//i.test(input);
   const looksLikeLocalPath = /^(?:[A-Za-z]:\\|\\\\|\/?)[^?]*\.(?:x?html?)$/i.test(input);
-  const isInternal = input.startsWith('browser://');
+  const isInternal = input.startsWith('nebula://');
   const isLikelyUrl = hasProtocol || input.includes('.');
   let resolved;
   if (isFileProtocol) {
@@ -725,7 +725,7 @@ function navigate() {
   let input = rawInput;
   if ((input.startsWith('"') && input.endsWith('"')) || (input.startsWith("'") && input.endsWith("'"))) input = input.slice(1, -1);
   if (input !== rawInput) urlBox.value = input;
-  const isInternal = input.startsWith('browser://');
+  const isInternal = input.startsWith('nebula://');
   if (isInternal && !pluginPagesReady) {
     const captured = input; // preserve original
     pendingInternalNavigations.push(() => performNavigation(captured, captured));
@@ -874,7 +874,7 @@ function handleNavigation(tabId, newUrl) {
   if (!newUrl.endsWith('home.html') && 
       !newUrl.endsWith('settings.html') && 
       !newUrl.startsWith('file://') && 
-      !newUrl.includes('browser://') &&
+      !newUrl.includes('nebula://') &&
       newUrl.startsWith('http')) {
   debug('[DEBUG] Adding to site history:', newUrl);
     addToSiteHistory(newUrl);
@@ -882,19 +882,31 @@ function handleNavigation(tabId, newUrl) {
     ipcRenderer.invoke('save-site-history-entry', newUrl);
   }
 
-  // translate local files back to our browser:// scheme
-  const isHome     = newUrl.endsWith('home.html');
-  const isSettings = newUrl.endsWith('settings.html');
+  // translate local files back to our nebula:// scheme
+  const isHome      = newUrl.endsWith('home.html');
+  const isSettings  = newUrl.endsWith('settings.html');
+  const isDownloads = newUrl.endsWith('downloads.html');
+  const isNebot     = newUrl.endsWith('nebot.html');
+  const isInsecure  = newUrl.includes('insecure.html');
+  const is404       = newUrl.includes('404.html');
   const displayUrl = isHome
-    ? 'browser://home'
+    ? 'nebula://home'
     : isSettings
-      ? 'browser://settings'
-      : newUrl;
+      ? 'nebula://settings'
+      : isDownloads
+        ? 'nebula://downloads'
+        : isNebot
+          ? 'nebula://nebot'
+          : isInsecure
+            ? 'nebula://insecure'
+            : is404
+              ? 'nebula://404'
+              : newUrl;
 
   tab.url = displayUrl;
 
   if (tabId === activeTabId) {
-    urlBox.value = displayUrl === 'browser://home' ? '' : displayUrl;
+    urlBox.value = displayUrl === 'nebula://home' ? '' : displayUrl;
   }
 
   scheduleRenderTabs();
@@ -929,7 +941,7 @@ function setActiveTab(id) {
 
   if (tab) {
     // If the tab URL represents the home page, keep the URL bar blank.
-    urlBox.value = tab.url === 'browser://home' ? '' : tab.url;
+    urlBox.value = tab.url === 'nebula://home' ? '' : tab.url;
   scheduleRenderTabs();
     updateNavButtons();
     updateZoomUI();            // ← update zoom display for new active tab
@@ -1244,12 +1256,12 @@ function freshReload() {
 
 // Function to open the Settings page
 function openSettings() {
-  createTab('browser://settings');
+  createTab('nebula://settings');
 }
 
 // Open Downloads manager page
 function openDownloads() {
-  createTab('browser://downloads');
+  createTab('nebula://downloads');
 }
 
 // Toggle menu dropdown

@@ -68,7 +68,7 @@
       window.parent.postMessage({ type:'navigate', url, opts }, '*');
     }
   }
-  document.getElementById('backBtn').onclick = () => history.length > 1 ? history.back() : sendNavigate('browser://home');
+  document.getElementById('backBtn').onclick = () => history.length > 1 ? history.back() : sendNavigate('nebula://home');
   document.getElementById('tryHttps').onclick = () => {
     if (!target) return; try {
       const u = new URL(target.replace(/^http:/,'https:'));

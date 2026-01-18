@@ -334,7 +334,7 @@ function initNavigation() {
   // NeBot launch
   const launchNebot = document.getElementById('launchNebot');
   if (launchNebot) {
-    launchNebot.addEventListener('click', () => navigateTo('browser://nebot'));
+    launchNebot.addEventListener('click', () => navigateTo('nebula://nebot'));
   }
   
   // History section buttons
@@ -1342,7 +1342,7 @@ async function loadHistory() {
 
 // Save a site to history
 async function saveToHistory(url) {
-  if (!url || url.startsWith('browser://')) return;
+  if (!url || url.startsWith('nebula://')) return;
   try {
     if (ipcRenderer && ipcRenderer.invoke) {
       await ipcRenderer.invoke('save-site-history-entry', url);
@@ -2378,7 +2378,7 @@ function isUrl(str) {
          str.includes('.org') ||
          str.includes('.net') ||
          str.includes('.io') ||
-         str.startsWith('browser://');
+         str.startsWith('nebula://');
 }
 
 // =============================================================================
@@ -2684,8 +2684,8 @@ function scrollWebview(amountY, amountX = 0) {
 
 function getDomainFromUrl(url) {
   try {
-    if (url.startsWith('browser://')) {
-      return url.replace('browser://', '').split('/')[0];
+    if (url.startsWith('nebula://')) {
+      return url.replace('nebula://', '').split('/')[0];
     }
     const hostname = new URL(url).hostname;
     return hostname.replace(/^www\./, '');
