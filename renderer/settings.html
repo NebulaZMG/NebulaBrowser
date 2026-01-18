@@ -10,7 +10,7 @@
 <body>
   <div class="container" role="application">
     <aside class="sidebar" aria-label="Settings categories">
-      <h1>⚙️ Settings</h1>
+      <h1>Settings</h1>
       <nav class="tabs" role="tablist">
         <button class="tab-link active" role="tab" aria-selected="true" aria-controls="panel-general" id="tab-general" data-tab="general">General</button>
         <button class="tab-link" role="tab" aria-selected="false" aria-controls="panel-appearance" id="tab-appearance" data-tab="appearance">Appearance</button>
@@ -39,7 +39,7 @@
           <p class="note">A controller-friendly UI designed for Steam Deck and handheld devices.</p>
           <div class="setting-row">
             <button id="launch-bigpicture-btn" class="primary-btn">
-              <span style="font-size: 18px;">🎮</span> Launch Big Picture Mode
+              <span style="font-size: 18px;"></span> Launch Big Picture Mode
             </button>
             <span id="bigpicture-status" class="note"></span>
           </div>
@@ -127,10 +127,21 @@
         <!-- Display Scale -->
         <div class="customization-group">
           <h3>Display Scale</h3>
-          <p class="note">Adjust the default zoom level when opening the browser. Changes require a reload to take effect.</p>
-          <div class="range-row">
-            <input type="range" id="display-scale-slider" min="50" max="300" value="100" step="10">
-            <span id="display-scale-value" class="range-value">100%</span>
+          <p class="note">Adjust the zoom level for this window. Changes apply immediately.</p>
+          <div class="zoom-controls">
+            <button class="zoom-btn" id="zoom-decrease" title="Decrease zoom">−</button>
+            <span id="display-scale-value" class="zoom-value">100%</span>
+            <button class="zoom-btn" id="zoom-increase" title="Increase zoom">+</button>
+          </div>
+          <div class="zoom-presets">
+            <button class="zoom-preset-btn" data-zoom="60">60%</button>
+            <button class="zoom-preset-btn" data-zoom="70">70%</button>
+            <button class="zoom-preset-btn" data-zoom="80">80%</button>
+            <button class="zoom-preset-btn" data-zoom="90">90%</button>
+            <button class="zoom-preset-btn" data-zoom="100">100%</button>
+            <button class="zoom-preset-btn" data-zoom="110">110%</button>
+            <button class="zoom-preset-btn" data-zoom="120">120%</button>
+            <button class="zoom-preset-btn" data-zoom="130">130%</button>
           </div>
         </div>
 
@@ -221,7 +232,7 @@
           <ul id="site-history-list"></ul>
           <div class="button-row" style="margin-top:10px;">
             <button id="clear-site-history-btn">Clear Site History</button>
-            <button id="add-test-history-btn">Add Test History</button>
+            
           </div>
         </div>
       </section>
@@ -380,6 +391,18 @@
       }
     }
 
+    // Get search history from localStorage in this webview context
+    function getSearchHistoryFromLocalStorage() {
+      try {
+        const history = localStorage.getItem('searchHistory');
+        console.log('[SETTINGS DEBUG] localStorage searchHistory:', history);
+        return history ? JSON.parse(history) : [];
+      } catch (err) {
+        console.error('[SETTINGS DEBUG] Error reading search history from localStorage:', err);
+        return [];
+      }
+    }
+
     // Sync site history from main browser's localStorage to this webview's localStorage
     function syncSiteHistoryFromMain() {
       try {
@@ -395,6 +418,25 @@
         return [];
       } catch (err) {
         console.log('[SETTINGS DEBUG] Could not sync from parent:', err.message);
+        return [];
+      }
+    }
+
+    // Sync search history from main browser's localStorage to this webview's localStorage
+    function syncSearchHistoryFromMain() {
+      try {
+        // Try to get the parent window's localStorage
+        if (window.parent && window.parent !== window) {
+          const parentHistory = window.parent.localStorage.getItem('searchHistory');
+          if (parentHistory) {
+            localStorage.setItem('searchHistory', parentHistory);
+            console.log('[SETTINGS DEBUG] Synced search history from parent window');
+            return JSON.parse(parentHistory);
+          }
+        }
+        return [];
+      } catch (err) {
+        console.log('[SETTINGS DEBUG] Could not sync search history from parent:', err.message);
         return [];
       }
     }
@@ -436,8 +478,11 @@
           siteHistory = getSiteHistoryFromLocalStorage();
         }
 
-        // Try to get search history via message passing to parent or direct file access
-        let searchHistory = [];
+        // Try to get search history from parent or localStorage
+        let searchHistory = syncSearchHistoryFromMain();
+        if (searchHistory.length === 0) {
+          searchHistory = getSearchHistoryFromLocalStorage();
+        }
 
         const searchList = document.getElementById('search-history-list');
         const siteList   = document.getElementById('site-history-list');
@@ -447,11 +492,22 @@
         siteList.innerHTML   = '';
 
         // Populate search history
-        const searchLi = document.createElement('li');
-        searchLi.textContent = 'Search history not available in webview context';
-        searchLi.style.fontStyle = 'italic';
-        searchLi.style.color = '#666';
-        searchList.appendChild(searchLi);
+        if (searchHistory && searchHistory.length > 0) {
+          console.log('[SETTINGS DEBUG] Displaying', searchHistory.length, 'search history items');
+          searchHistory.forEach(query => {
+            const li = document.createElement('li');
+            li.style.wordBreak = 'break-all';
+            li.textContent = query;
+            li.style.color = 'var(--text)';
+            searchList.appendChild(li);
+          });
+        } else {
+          const searchLi = document.createElement('li');
+          searchLi.textContent = 'No search history yet';
+          searchLi.style.fontStyle = 'italic';
+          searchLi.style.color = '#666';
+          searchList.appendChild(searchLi);
+        }
 
         // Populate site history
         if (siteHistory && siteHistory.length > 0) {
@@ -526,7 +582,25 @@
     }
 
     async function clearSearchHistory() {
-      console.log('Search history clearing not available in webview context');
+      try {
+        // Clear from localStorage
+        localStorage.removeItem('searchHistory');
+        console.log('[SETTINGS DEBUG] Cleared search history from localStorage');
+        
+        // Also clear in parent window if accessible
+        if (window.parent && window.parent !== window) {
+          try {
+            window.parent.localStorage.removeItem('searchHistory');
+            console.log('[SETTINGS DEBUG] Cleared search history from parent');
+          } catch (e) {
+            console.log('[SETTINGS DEBUG] Could not clear parent search history:', e.message);
+          }
+        }
+        
+        loadHistories(); // Refresh the display
+      } catch (err) {
+        console.error('Error clearing search history:', err);
+      }
     }
 
     // Load histories on page load

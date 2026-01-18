@@ -234,7 +234,7 @@ button:hover {
   padding: 0.5rem 1rem;
   font-size: 14px;
   font-weight: 500;
-  background: linear-gradient(135deg, var(--primary), var(--accent));
+  background: var(--primary);
   color: var(--text);
   border: 1px solid var(--primary);
   border-radius: 6px;
@@ -244,7 +244,7 @@ button:hover {
 }
 
 .primary-btn:hover {
-  background: linear-gradient(135deg, var(--primary-hover), var(--accent));
+  background: var(--primary-hover);
   box-shadow: 0 4px 24px rgba(123, 46, 255, 0.25);
   transform: translateY(-1px);
 }
@@ -370,6 +370,84 @@ button:hover {
   text-align: right;
   font-weight: 600;
   color: color-mix(in srgb, var(--text) 85%, transparent);
+}
+
+/* Zoom controls */
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.zoom-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 6px;
+  font-size: 20px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.zoom-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary);
+}
+
+.zoom-btn:active {
+  transform: scale(0.95);
+}
+
+.zoom-value {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  padding: 0 8px;
+}
+
+.zoom-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+  gap: 8px;
+}
+
+.zoom-preset-btn {
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.zoom-preset-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.zoom-preset-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+  box-shadow: var(--glow-subtle);
+}
+
+.zoom-preset-btn:active {
+  transform: scale(0.95);
 }
 
 .settings-fieldset {

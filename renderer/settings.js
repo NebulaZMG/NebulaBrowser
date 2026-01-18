@@ -95,6 +95,9 @@ window.addEventListener('DOMContentLoaded', () => {
   if (clearSearchBtn) {
     clearSearchBtn.addEventListener('click', async () => {
       try {
+        // Clear from localStorage in this context
+        try { localStorage.removeItem('searchHistory'); } catch {}
+        
         if (ipc) { await ipc.invoke('clear-search-history'); }
         showStatus('Search history cleared');
       } catch (e) {
@@ -171,23 +174,75 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Display scale controls
   try {
-    const scaleSlider = document.getElementById('display-scale-slider');
     const scaleValue = document.getElementById('display-scale-value');
+    const zoomDecrease = document.getElementById('zoom-decrease');
+    const zoomIncrease = document.getElementById('zoom-increase');
+    const zoomPresets = document.querySelectorAll('.zoom-preset-btn');
     
-    const initScale = Number(localStorage.getItem(DISPLAY_SCALE_KEY) || 100);
-    if (scaleSlider) {
-      scaleSlider.value = String(initScale);
-      if (scaleValue) scaleValue.textContent = initScale + '%';
+    let currentScale = Number(localStorage.getItem(DISPLAY_SCALE_KEY) || 100);
+    
+    // Function to apply zoom
+    async function applyZoom(scale) {
+      currentScale = Math.max(50, Math.min(300, scale));
+      if (scaleValue) scaleValue.textContent = currentScale + '%';
+      localStorage.setItem(DISPLAY_SCALE_KEY, String(currentScale));
+      
+      // Highlight active preset
+      zoomPresets.forEach(btn => {
+        btn.classList.toggle('active', Number(btn.dataset.zoom) === currentScale);
+      });
+      
+      if (ipc && typeof ipc.invoke === 'function') {
+        try {
+          const zoomFactor = currentScale / 100;
+          await ipc.invoke('set-zoom-factor', zoomFactor);
+          showStatus(`Zoom set to ${currentScale}%`);
+        } catch (err) {
+          console.warn('Failed to apply zoom:', err);
+          showStatus(`Zoom saved to ${currentScale}%`);
+        }
+      }
     }
     
-    if (scaleSlider) {
-      scaleSlider.addEventListener('input', () => {
-        const val = Number(scaleSlider.value);
-        if (scaleValue) scaleValue.textContent = val + '%';
-        localStorage.setItem(DISPLAY_SCALE_KEY, String(val));
-        showStatus(`Display scale set to ${val}%`);
+    // Initialize display
+    if (scaleValue) scaleValue.textContent = currentScale + '%';
+    zoomPresets.forEach(btn => {
+      btn.classList.toggle('active', Number(btn.dataset.zoom) === currentScale);
+    });
+    
+    // Apply saved zoom on load
+    if (ipc && typeof ipc.invoke === 'function' && currentScale !== 100) {
+      try {
+        const zoomFactor = currentScale / 100;
+        ipc.invoke('set-zoom-factor', zoomFactor).catch(err => {
+          console.warn('Failed to apply initial zoom:', err);
+        });
+      } catch (err) {
+        console.warn('Failed to apply initial zoom:', err);
+      }
+    }
+    
+    // Decrease button
+    if (zoomDecrease) {
+      zoomDecrease.addEventListener('click', () => {
+        applyZoom(currentScale - 10);
       });
     }
+    
+    // Increase button
+    if (zoomIncrease) {
+      zoomIncrease.addEventListener('click', () => {
+        applyZoom(currentScale + 10);
+      });
+    }
+    
+    // Preset buttons
+    zoomPresets.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const zoom = Number(btn.dataset.zoom);
+        applyZoom(zoom);
+      });
+    });
   } catch (e) { console.warn('Display scale setup failed', e); }
 
   // Big Picture Mode controls

@@ -128,6 +128,38 @@ function addToSiteHistory(url) {
   }
 }
 
+// Search history management using localStorage
+function getSearchHistory() {
+  try {
+    const history = localStorage.getItem('searchHistory');
+    return history ? JSON.parse(history) : [];
+  } catch (err) {
+    console.error('Error reading search history from localStorage:', err);
+    return [];
+  }
+}
+
+function addToSearchHistory(searchQuery) {
+  try {
+    let history = getSearchHistory();
+    // Remove if already exists to avoid duplicates
+    history = history.filter(item => item !== searchQuery);
+    // Add to beginning
+    history.unshift(searchQuery);
+    // Keep only last 100 entries
+    if (history.length > 100) {
+      history = history.slice(0, 100);
+    }
+    localStorage.setItem('searchHistory', JSON.stringify(history));
+    // Also save to file via IPC for persistence
+    if (window.electronAPI && window.electronAPI.invoke) {
+      window.electronAPI.invoke('save-search-history', history);
+    }
+  } catch (err) {
+    console.error('Error saving search history to localStorage:', err);
+  }
+}
+
 // Store current theme colors globally for use by renderTabs
 let currentThemeColors = null;
 
@@ -653,6 +685,7 @@ function performNavigation(input, originalInputForHistory) {
   const isInternal = input.startsWith('nebula://');
   const isLikelyUrl = hasProtocol || input.includes('.');
   let resolved;
+  let isSearch = false;
   if (isFileProtocol) {
     resolved = input;
   } else if (looksLikeLocalPath) {
@@ -660,6 +693,9 @@ function performNavigation(input, originalInputForHistory) {
     if (/^[A-Za-z]:\//.test(p)) resolved = 'file:///' + encodeURI(p); else if (p.startsWith('/')) resolved = 'file://' + encodeURI(p); else resolved = 'file://' + encodeURI(p);
   } else if (!isInternal && !isLikelyUrl) {
     resolved = `https://www.google.com/search?q=${encodeURIComponent(input)}`;
+    isSearch = true;
+    // Save to search history
+    addToSearchHistory(input);
   } else {
     resolved = resolveInternalUrl(input);
   }
