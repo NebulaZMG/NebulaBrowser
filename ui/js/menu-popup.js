@@ -17,6 +17,17 @@ function applyTheme(theme) {
   setCssVar('--url-bar-border', colors.urlBarBorder, '#3e4652');
 }
 
+function sendMenuCommand(cmd) {
+  if (window.electronAPI?.send) {
+    window.electronAPI.send('menu-popup-command', { cmd });
+    return;
+  }
+
+  if (window.nebulaNative?.postMessage) {
+    window.nebulaNative.postMessage(cmd);
+  }
+}
+
 async function refreshZoom() {
   if (!window.electronAPI?.invoke || !zoomPercentEl) return;
   try {
@@ -34,7 +45,7 @@ window.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-cmd]');
   if (!btn) return;
   const cmd = btn.getAttribute('data-cmd');
-  window.electronAPI?.send?.('menu-popup-command', { cmd });
+  sendMenuCommand(cmd);
   if (cmd === 'zoom-in' || cmd === 'zoom-out') {
     setTimeout(refreshZoom, 50);
   }
@@ -42,7 +53,7 @@ window.addEventListener('click', (e) => {
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    window.electronAPI?.send?.('menu-popup-command', { cmd: 'close' });
+    sendMenuCommand('close-menu-popup');
   }
 });
 
