@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>New Tab</title>
+  <link rel="icon" href="../assets/images/branding/Nebula-Icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../css/home.css">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+        rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3/fonts/remixicon.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1/font/bootstrap-icons.css" rel="stylesheet">
+</head>
+<body>
+  <div class="home-container">
+  <button id="editLayoutBtn" class="edit-btn" aria-pressed="false" title="Edit layout">Edit</button>
+    <!-- Dynamic greeting replaces the large logo for a cleaner hero look -->
+    <h1 id="greeting" class="greeting-title">Welcome</h1>
+
+    <!-- Retain logo for branding but keep it subtle/optional -->
+    <div class="logo" aria-hidden="true" style="display:none">
+      <img src="../assets/images/branding/Nebula-Logo.svg" class="logo-img">
+      <div class="logo-text">Nebula Browser</div>
+    </div>
+
+    <div class="search-container">
+      <div class="search-engine-selector">
+        <button id="searchEngineBtn" class="search-engine-btn">
+          <img id="searchEngineLogo" src="../assets/icons/searchengines/google.svg" alt="Search Engine">
+        </button>
+        <div id="searchEngineDropdown" class="search-engine-dropdown hidden">
+          <div class="search-engine-option" data-engine="google">
+            <img src="../assets/icons/searchengines/google.svg" alt="Google">
+          </div>
+          <div class="search-engine-option" data-engine="bing">
+            <img src="../assets/icons/searchengines/Bing.svg" alt="Bing">
+          </div>
+          <div class="search-engine-option" data-engine="duckduckgo">
+            <img src="../assets/icons/searchengines/duckduckgo.svg" alt="DuckDuckGo">
+          </div>
+        </div>
+      </div>
+      <div class="search-bar">
+        <input type="text" id="searchInput" class="search-input" placeholder="Search">
+        <button id="searchBtn" class="search-btn">
+          <span class="material-symbols-outlined">search</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Top Sites card -->
+    <section class="top-sites-card">
+      <header class="top-sites-header">
+        <h2>Bookmarks</h2>
+        <button id="resetTopSites" class="link-btn" title="Clear bookmarks">Reset</button>
+      </header>
+      <div class="bookmarks" id="bookmarkList">
+        <!-- Bookmarks dynamically inserted here -->
+      </div>
+    </section>
+  </div>
+
+  <!-- At a glance widget -->
+  <aside class="glance" aria-live="polite">
+    <div class="glance-card">
+      <div class="glance-title">At A Glance</div>
+      <div class="glance-grid">
+        <div class="glance-tile">
+          <div class="glance-label">Time</div>
+          <div id="clock" class="glance-value">--:--</div>
+        </div>
+        <div class="glance-tile">
+          <div class="glance-label">Weather</div>
+          <div id="weather" class="glance-value">Fetching…</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Edit mode toolbar -->
+  <div id="editToolbar" class="edit-toolbar" hidden>
+    <label style="display:flex;align-items:center;gap:6px;margin-right:8px;">
+      <input type="checkbox" id="toggleShowGreeting" checked>
+      <span>Show greeting</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;margin-right:8px;">
+      <input type="checkbox" id="toggleShowBookmarks" checked>
+      <span>Show bookmarks</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;margin-right:12px;">
+      <input type="checkbox" id="toggleShowGlance" checked>
+      <span>Show At a Glance</span>
+    </label>
+    <button id="cancelEditBtn" class="btn secondary" aria-label="Cancel layout edits">Cancel</button>
+    <button id="saveEditBtn" class="btn primary" aria-label="Save layout edits">Save</button>
+  </div>
+
+  <!-- Popup for adding a bookmark -->
+  <div id="addPopup" class="popup hidden">
+    <div class="popup-inner">
+      <h2>Add New Bookmark</h2>
+
+      <!-- Title field -->
+      <label for="titleInput">Title</label>
+      <input type="text" id="titleInput" placeholder="Enter title">
+
+      <!-- URL field -->
+      <label for="urlInput">URL</label>
+      <input type="url" id="urlInput" placeholder="https://example.com">
+
+      <!-- Icon picker -->
+      <div class="icon-picker-layout">
+        <nav class="icon-side-nav" id="iconCategoryNav" aria-label="Icon Categories">
+          <!-- Category nav buttons injected here -->
+        </nav>
+        <div class="icon-main">
+          <div class="icon-header">
+            <label for="iconFilter" class="icon-filter-label">Icon</label>
+            <div class="favicon-toggle">
+              <input type="checkbox" id="useFavicon" class="favicon-checkbox">
+              <label for="useFavicon" class="favicon-label">Use site favicon</label>
+            </div>
+          </div>
+          <input type="text" id="iconFilter" class="icon-filter"
+                 placeholder="Search for icon, enter emoji, or type 'favicon'">
+          <div id="iconGrid" class="icon-grid" tabindex="0" aria-label="Icon selection list"></div>
+          <input type="hidden" id="selectedIcon">
+        </div>
+      </div>
+
+      <!-- action buttons -->
+      <div class="popup-buttons">
+        <button id="cancelBtn">Cancel</button>
+        <button id="saveBookmarkBtn">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Theme loader script -->
+  <script src="../js/customization.js"></script>
+  <script>
+    // Apply saved theme on page load and listen for updates
+    document.addEventListener('DOMContentLoaded', () => {
+      BrowserCustomizer.applyThemeToPage();
+
+      // Function to update logo and title based on theme
+      function updateLogoAndTitle(theme) {
+        const logoText = document.querySelector('.logo-text');
+        const logoImg = document.querySelector('.logo-img');
+        if (logoText) {
+          logoText.textContent = theme.customTitle || 'Nebula Browser';
+        }
+        if (logoImg) {
+          logoImg.style.display = theme.showLogo ? 'block' : 'none';
+        }
+      }
+
+      // Listen for theme updates via postMessage fallback
+      window.addEventListener('message', (event) => {
+        if (event.data.type === 'theme-update') {
+          const theme = event.data.theme;
+          localStorage.setItem('currentTheme', JSON.stringify(theme));
+          BrowserCustomizer.applyThemeToPage();
+          updateLogoAndTitle(theme);
+        }
+      });
+
+      // Listen for theme updates when a native bridge provides them.
+      if (window.electronAPI && typeof window.electronAPI.on === 'function') {
+        window.electronAPI.on('theme-update', (theme) => {
+          localStorage.setItem('currentTheme', JSON.stringify(theme));
+          BrowserCustomizer.applyThemeToPage();
+          updateLogoAndTitle(theme);
+        });
+      }
+    });
+  </script>
+
+  <!-- make this a module so we can import icons -->
+  <script type="module" src="../js/home.js"></script>
+</body>
+</html>
