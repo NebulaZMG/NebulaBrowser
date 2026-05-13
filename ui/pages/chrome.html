@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nebula Chrome</title>
+  <link rel="stylesheet" href="../css/chrome.css">
+</head>
+<body>
+  <div class="nebula-chrome" data-drag-region>
+    <div class="title-row" data-drag-region>
+      <div class="brand" data-drag-region>
+        <img src="../assets/images/branding/Nebula-Icon.svg" alt="" class="brand-icon">
+        <span>Nebula</span>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Nebula tabs">
+        <button id="active-tab" class="tab active" type="button" role="tab" aria-selected="true">
+          <span id="tab-favicon" class="tab-favicon"></span>
+          <span id="tab-title" class="tab-title">New Tab</span>
+          <span id="tab-loading" class="tab-loading" hidden></span>
+        </button>
+        <button class="tab-add" type="button" data-command="new-tab" title="New tab" aria-label="New tab">
+          <i data-lucide="plus"></i>
+        </button>
+      </div>
+
+      <div class="window-controls" aria-label="Window controls">
+        <button type="button" data-command="minimize" aria-label="Minimize">
+          <i data-lucide="minus"></i>
+        </button>
+        <button type="button" data-command="maximize" aria-label="Maximize">
+          <i data-lucide="square"></i>
+        </button>
+        <button type="button" data-command="close" class="close" aria-label="Close">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button id="back-button" class="icon-button" type="button" data-command="back" aria-label="Back" disabled>
+        <i data-lucide="chevron-left"></i>
+      </button>
+      <button id="forward-button" class="icon-button" type="button" data-command="forward" aria-label="Forward" disabled>
+        <i data-lucide="chevron-right"></i>
+      </button>
+      <button id="reload-button" class="icon-button" type="button" data-command="reload" aria-label="Reload">
+        <i data-lucide="rotate-cw"></i>
+      </button>
+      <button class="icon-button" type="button" data-command="home" aria-label="Home">
+        <i data-lucide="home"></i>
+      </button>
+
+      <form id="address-form" class="address-shell" autocomplete="off">
+        <div id="progress-bar" class="progress-bar"></div>
+        <label class="sr-only" for="address-input">Search or enter address</label>
+        <input id="address-input" type="text" spellcheck="false" placeholder="Search or enter address">
+      </form>
+
+      <button class="icon-button" type="button" data-command="settings" aria-label="Settings">
+        <i data-lucide="settings"></i>
+      </button>
+      <button class="icon-button menu-button" type="button" data-command="menu-popup" aria-label="Open menu" title="Open menu">
+        <i data-lucide="menu"></i>
+      </button>
+    </div>
+  </div>
+
+  <script src="../js/lucide.min.js"></script>
+  <script>lucide.createIcons();</script>
+  <script src="../js/chrome.js"></script>
+</body>
+</html>

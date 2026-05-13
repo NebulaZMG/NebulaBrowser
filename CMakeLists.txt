@@ -39,6 +39,15 @@ add_subdirectory(
 
 set(NEBULA_SOURCES
     app/main.cpp
+    src/app/nebula_controller.cpp
+    src/app/run.cpp
+    src/browser/tab.cpp
+    src/browser/tab_manager.cpp
+    src/browser/url_utils.cpp
+    src/cef/browser_client.cpp
+    src/cef/nebula_app.cpp
+    src/ui/paths.cpp
+    src/window/nebula_window.cpp
 )
 
 add_executable(NebulaBrowser WIN32
@@ -54,6 +63,7 @@ if(MSVC)
 endif()
 
 target_include_directories(NebulaBrowser PRIVATE
+    "${CMAKE_SOURCE_DIR}/src"
     "${CEF_ROOT}"
     "${CEF_ROOT}/include"
 )
@@ -70,6 +80,7 @@ target_link_libraries(NebulaBrowser PRIVATE
 if(WIN32)
     target_link_libraries(NebulaBrowser PRIVATE
         "${CEF_ROOT}/Release/libcef.lib"
+        dwmapi
     )
 
     target_compile_definitions(NebulaBrowser PRIVATE
