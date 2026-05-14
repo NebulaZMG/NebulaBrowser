@@ -29,6 +29,19 @@ int RunNebula(HINSTANCE instance, int show_command) {
     CefSettings settings;
     settings.no_sandbox = true;
 
+    // A persistent profile is required for the GPU shader cache and several
+    // hardware acceleration features. Without these Chromium silently falls
+    // back to software rendering, which causes choppy video and disables
+    // WebGL/WebGL2 in the GPU diagnostics page.
+    const std::wstring user_data_dir = nebula::ui::GetUserDataDirectory().wstring();
+    const std::wstring cache_dir = nebula::ui::GetCacheDirectory().wstring();
+    if (!user_data_dir.empty()) {
+        CefString(&settings.root_cache_path).FromWString(user_data_dir);
+    }
+    if (!cache_dir.empty()) {
+        CefString(&settings.cache_path).FromWString(cache_dir);
+    }
+
     if (!CefInitialize(main_args, settings, app, nullptr)) {
         return CefGetExitCode();
     }

@@ -58,6 +58,26 @@ void NebulaApp::OnBeforeCommandLineProcessing(const CefString& process_type,
 
     // The bundled UI is loaded from file:// and uses ES modules.
     command_line->AppendSwitch("allow-file-access-from-files");
+
+    // CefSettings.no_sandbox disables the browser-level sandbox, but Chromium
+    // still attempts to bring up a separate GPU sandbox inside the GPU process.
+    // Without the host-side sandbox plumbing this fails with STATUS_BREAKPOINT
+    // (-2147483645) immediately on startup, which is exactly what the GPU
+    // diagnostics page was showing - the GPU process crashed three times and
+    // Chromium then fell back to software rendering. Disabling the GPU sandbox
+    // matches the rest of our no_sandbox configuration and lets the GPU
+    // process initialize.
+    command_line->AppendSwitch("no-sandbox");
+    command_line->AppendSwitch("disable-gpu-sandbox");
+    command_line->AppendSwitch("in-process-gpu");
+
+    // Avoid Chromium's conservative GPU blocklist, but let Chromium choose the
+    // safest graphics backend for this machine. Forcing raster/zero-copy paths
+    // can prevent WebGL shared contexts from initializing on some drivers.
+    command_line->AppendSwitch("ignore-gpu-blocklist");
+    command_line->AppendSwitch("enable-accelerated-video-decode");
+    command_line->AppendSwitchWithValue("use-gl", "angle");
+    command_line->AppendSwitchWithValue("use-angle", "d3d11");
 }
 
 void NebulaApp::OnContextCreated(CefRefPtr<CefBrowser> browser,

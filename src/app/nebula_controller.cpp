@@ -40,6 +40,12 @@ CefWindowInfo ChildWindowInfo(HWND parent, const RECT& rect) {
     return info;
 }
 
+CefBrowserSettings BrowserSettings() {
+    CefBrowserSettings settings;
+    settings.webgl = STATE_ENABLED;
+    return settings;
+}
+
 int ParseTabId(const std::string& value) {
     int tab_id = 0;
     const auto result = std::from_chars(value.data(), value.data() + value.size(), tab_id);
@@ -388,7 +394,7 @@ void NebulaController::CreateChromeBrowser() {
     }
 
     const auto layout = window_->CurrentLayout();
-    CefBrowserSettings browser_settings;
+    CefBrowserSettings browser_settings = BrowserSettings();
     chrome_client_ = new nebula::cef::NebulaBrowserClient(nebula::cef::BrowserRole::Chrome, this);
     CefWindowInfo window_info = ChildWindowInfo(window_->hwnd(), layout.chrome);
     CefBrowserHost::CreateBrowser(
@@ -403,7 +409,7 @@ void NebulaController::CreateContentBrowser() {
     const auto* tab = tabs_.ActiveTab();
     const std::string url = tab && !tab->url.empty() ? tab->url : nebula::ui::GetHomeUrl();
     const auto layout = window_->CurrentLayout();
-    CefBrowserSettings browser_settings;
+    CefBrowserSettings browser_settings = BrowserSettings();
     content_client_ = new nebula::cef::NebulaBrowserClient(nebula::cef::BrowserRole::Content, this);
     CefWindowInfo window_info = ChildWindowInfo(window_->hwnd(), layout.content);
     CefBrowserHost::CreateBrowser(
@@ -431,7 +437,7 @@ void NebulaController::CreateMenuPopupBrowser() {
     }
 
     const auto layout = window_->CurrentLayout();
-    CefBrowserSettings browser_settings;
+    CefBrowserSettings browser_settings = BrowserSettings();
     menu_popup_client_ = new nebula::cef::NebulaBrowserClient(nebula::cef::BrowserRole::MenuPopup, this);
     CefWindowInfo window_info = ChildWindowInfo(window_->hwnd(), MenuPopupRect(window_->hwnd(), layout));
     CefBrowserHost::CreateBrowser(

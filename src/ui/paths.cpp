@@ -136,6 +136,44 @@ std::filesystem::path GetExecutableDirectory() {
     return std::filesystem::path(exe_path).parent_path();
 }
 
+std::filesystem::path GetUserDataDirectory() {
+    std::filesystem::path root;
+
+    wchar_t buffer[MAX_PATH] = {};
+    // Prefer %LOCALAPPDATA% so the profile follows Chromium conventions and
+    // survives executable relocation.
+    const DWORD length =
+        GetEnvironmentVariableW(L"LOCALAPPDATA", buffer, MAX_PATH);
+    if (length > 0 && length < MAX_PATH) {
+        root = std::filesystem::path(buffer);
+    } else {
+        // Fall back to a directory next to the executable so a portable
+        // install still gets a writable profile.
+        root = GetExecutableDirectory();
+    }
+
+    if (root.empty()) {
+        return {};
+    }
+
+    std::filesystem::path user_data = root / L"Nebula" / L"User Data";
+    std::error_code ec;
+    std::filesystem::create_directories(user_data, ec);
+    return user_data;
+}
+
+std::filesystem::path GetCacheDirectory() {
+    auto user_data = GetUserDataDirectory();
+    if (user_data.empty()) {
+        return {};
+    }
+
+    std::filesystem::path cache = user_data / L"Cache";
+    std::error_code ec;
+    std::filesystem::create_directories(cache, ec);
+    return cache;
+}
+
 std::filesystem::path GetUiPagePath(const std::wstring& page_name) {
     const auto exe_dir = GetExecutableDirectory();
     if (exe_dir.empty()) {
