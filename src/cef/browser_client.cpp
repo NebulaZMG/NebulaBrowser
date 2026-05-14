@@ -17,6 +17,14 @@ bool IsInsecureInterstitialFrame(CefRefPtr<CefFrame> frame) {
     return nebula::ui::ToInternalUrl(frame->GetURL().ToString()).starts_with("nebula://insecure");
 }
 
+bool IsSettingsFrame(CefRefPtr<CefFrame> frame) {
+    if (!frame) {
+        return false;
+    }
+
+    return nebula::ui::ToInternalUrl(frame->GetURL().ToString()).starts_with("nebula://settings");
+}
+
 std::vector<std::string> ToStringVector(const std::vector<CefString>& values) {
     std::vector<std::string> result;
     result.reserve(values.size());
@@ -51,9 +59,16 @@ bool NebulaBrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser
     CefRefPtr<CefListValue> args = message->GetArgumentList();
     const std::string command = args && args->GetSize() > 0 ? args->GetString(0).ToString() : "";
     const std::string payload = args && args->GetSize() > 1 ? args->GetString(1).ToString() : "";
-    if (role_ == BrowserRole::Content &&
-        (command != "navigate-insecure" || !IsInsecureInterstitialFrame(frame))) {
-        return false;
+    if (role_ == BrowserRole::Content) {
+        const bool allowed_insecure_command =
+            command == "navigate-insecure" && IsInsecureInterstitialFrame(frame);
+        const bool allowed_settings_command =
+            IsSettingsFrame(frame) && (command == "navigate" ||
+                                       command == "clear-site-history" ||
+                                       command == "clear-search-history");
+        if (!allowed_insecure_command && !allowed_settings_command) {
+            return false;
+        }
     }
 
     if (delegate_ && !command.empty()) {
@@ -204,6 +219,7 @@ void NebulaBrowserClient::OnLoadEnd(CefRefPtr<CefBrowser> browser,
         }
 
         delegate_->OnContentLoadProgressChanged(browser, 1.0);
+        delegate_->OnContentLoadFinished(browser, frame->GetURL().ToString());
     }
 }
 

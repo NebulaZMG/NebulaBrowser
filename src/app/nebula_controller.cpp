@@ -4,6 +4,9 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cctype>
+#include <filesystem>
+#include <fstream>
 #include <system_error>
 
 #include "browser/session_state.h"
@@ -17,6 +20,8 @@
 namespace nebula::app {
 namespace {
 
+constexpr size_t kMaxSiteHistoryEntries = 200;
+
 std::wstring Utf8ToWide(const std::string& value) {
     if (value.empty()) {
         return {};
@@ -28,6 +33,67 @@ std::wstring Utf8ToWide(const std::string& value) {
     MultiByteToWideChar(
         CP_UTF8, 0, value.data(), static_cast<int>(value.size()), result.data(), size);
     return result;
+}
+
+std::filesystem::path GetSiteHistoryPath() {
+    const auto user_data = nebula::ui::GetUserDataDirectory();
+    return user_data.empty() ? std::filesystem::path{} : user_data / L"site_history.txt";
+}
+
+std::string ToLowerAscii(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
+
+bool IsSiteHistoryUrl(const std::string& url) {
+    const std::string lower = ToLowerAscii(url);
+    return lower.starts_with("http://") || lower.starts_with("https://");
+}
+
+std::vector<std::string> LoadSiteHistory() {
+    std::vector<std::string> history;
+    std::ifstream input(GetSiteHistoryPath(), std::ios::binary);
+    if (!input) {
+        return history;
+    }
+
+    std::string url;
+    while (std::getline(input, url) && history.size() < kMaxSiteHistoryEntries) {
+        if (IsSiteHistoryUrl(url)) {
+            history.push_back(url);
+        }
+    }
+    return history;
+}
+
+void SaveSiteHistory(const std::vector<std::string>& history) {
+    const auto path = GetSiteHistoryPath();
+    if (path.empty()) {
+        return;
+    }
+
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        return;
+    }
+
+    for (const auto& url : history) {
+        output << url << '\n';
+    }
+}
+
+std::string SiteHistoryJson(const std::vector<std::string>& history) {
+    std::string json = "[";
+    for (size_t i = 0; i < history.size(); ++i) {
+        if (i > 0) {
+            json += ",";
+        }
+        json += "\"" + nebula::browser::JsonEscape(history[i]) + "\"";
+    }
+    json += "]";
+    return json;
 }
 
 CefWindowInfo ChildWindowInfo(HWND parent, const RECT& rect) {
@@ -141,7 +207,8 @@ NebulaController::NebulaController(HINSTANCE instance, std::string initial_url, 
     : instance_(instance),
       initial_url_(std::move(initial_url)),
       show_command_(show_command),
-      tabs_(this) {}
+      tabs_(this),
+      site_history_(LoadSiteHistory()) {}
 
 NebulaController::~NebulaController() = default;
 
@@ -152,15 +219,11 @@ bool NebulaController::Create() {
 
 void NebulaController::OnWindowCreated() {
     if (initial_url_.empty()) {
-        const auto session = nebula::browser::LoadSessionState();
-        if (!session.tabs.empty()) {
-            tabs_.RestoreTabs(session.tabs, session.active_tab_index);
-        } else {
-            tabs_.CreateInitialTab(nebula::ui::GetHomeUrl());
-        }
+        tabs_.CreateInitialTab(nebula::ui::GetHomeUrl());
     } else {
         tabs_.CreateInitialTab(initial_url_);
     }
+    PersistSession();
 
     CreateChromeBrowser();
     CreateContentBrowser();
@@ -303,6 +366,12 @@ void NebulaController::OnChromeCommand(const std::string& command, const std::st
         CloseMenuPopup();
     } else if (command == "home") {
         tabs_.LoadURL(nebula::ui::GetHomeUrl());
+    } else if (command == "clear-site-history") {
+        site_history_.clear();
+        SaveSiteHistory(site_history_);
+        if (auto* tab = tabs_.ActiveTab(); tab && tab->browser) {
+            InjectSettingsHistory(tab->browser);
+        }
     } else if (command == "minimize" && window_) {
         window_->Minimize();
     } else if (command == "maximize" && window_) {
@@ -315,10 +384,12 @@ void NebulaController::OnChromeCommand(const std::string& command, const std::st
 }
 
 void NebulaController::OnContentAddressChanged(CefRefPtr<CefBrowser> browser, const std::string& url) {
+    const std::string internal_url = nebula::ui::ToInternalUrl(url);
     tabs_.UpdateURL(browser,
                     nebula::ui::IsChromiumNewTabUrl(url)
                         ? nebula::ui::GetHomeUrl()
-                        : nebula::ui::ToInternalUrl(url));
+                        : internal_url);
+    RecordSiteHistory(internal_url);
     PersistSession();
 }
 
@@ -337,6 +408,12 @@ void NebulaController::OnContentLoadingStateChanged(CefRefPtr<CefBrowser> browse
 
 void NebulaController::OnContentLoadProgressChanged(CefRefPtr<CefBrowser> browser, double progress) {
     tabs_.UpdateLoadProgress(browser, progress);
+}
+
+void NebulaController::OnContentLoadFinished(CefRefPtr<CefBrowser> browser, const std::string& url) {
+    if (nebula::ui::ToInternalUrl(url).starts_with(nebula::ui::GetSettingsUrl())) {
+        InjectSettingsHistory(browser);
+    }
 }
 
 void NebulaController::OnContentFaviconChanged(CefRefPtr<CefBrowser> browser, const std::vector<std::string>& urls) {
@@ -612,6 +689,33 @@ void NebulaController::SendChromeState(const nebula::browser::NebulaTab& tab) {
         "});";
 
     chrome_browser_->GetMainFrame()->ExecuteJavaScript(script, nebula::ui::GetChromeUrl(), 0);
+}
+
+void NebulaController::RecordSiteHistory(const std::string& url) {
+    if (!IsSiteHistoryUrl(url)) {
+        return;
+    }
+
+    site_history_.erase(
+        std::remove(site_history_.begin(), site_history_.end(), url),
+        site_history_.end());
+    site_history_.insert(site_history_.begin(), url);
+    if (site_history_.size() > kMaxSiteHistoryEntries) {
+        site_history_.resize(kMaxSiteHistoryEntries);
+    }
+    SaveSiteHistory(site_history_);
+}
+
+void NebulaController::InjectSettingsHistory(CefRefPtr<CefBrowser> browser) {
+    if (!browser) {
+        return;
+    }
+
+    const std::string history_json = SiteHistoryJson(site_history_);
+    const std::string script =
+        "localStorage.setItem('siteHistory', \"" + nebula::browser::JsonEscape(history_json) + "\");"
+        "if (typeof loadHistories === 'function') { loadHistories(); }";
+    browser->GetMainFrame()->ExecuteJavaScript(script, nebula::ui::GetSettingsUrl(), 0);
 }
 
 void NebulaController::PersistSession() const {

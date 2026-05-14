@@ -72,10 +72,6 @@
             <span class="material-symbols-outlined">bookmarks</span>
             <span class="nav-label">Bookmarks</span>
           </button>
-          <button class="nav-item" data-section="history" data-focusable tabindex="0">
-            <span class="material-symbols-outlined">history</span>
-            <span class="nav-label">History</span>
-          </button>
           <button class="nav-item" data-section="downloads" data-focusable tabindex="0">
             <span class="material-symbols-outlined">download</span>
             <span class="nav-label">Downloads</span>
@@ -123,13 +119,6 @@
             </div>
           </div>
 
-          <!-- Recent sites -->
-          <div class="recent-sites">
-            <h2 class="subsection-title">Continue Browsing</h2>
-            <div class="horizontal-scroll" id="recentSitesScroll">
-              <!-- Recent sites will be populated dynamically -->
-            </div>
-          </div>
         </section>
 
         <!-- Browse section (for webview) -->
@@ -155,27 +144,6 @@
           </div>
           <div class="tile-grid large" id="bookmarksGrid">
             <!-- Bookmarks will be populated dynamically -->
-          </div>
-        </section>
-
-        <!-- History section -->
-        <section id="section-history" class="bp-section">
-          <div class="section-header">
-            <h1 class="section-title">History</h1>
-            <p class="section-subtitle">Recently visited sites</p>
-          </div>
-          <div class="section-actions">
-            <button class="action-btn" id="clearHistoryBtn" data-focusable tabindex="0">
-              <span class="material-symbols-outlined">delete_sweep</span>
-              <span>Clear History</span>
-            </button>
-            <button class="action-btn" id="refreshHistoryBtn" data-focusable tabindex="0">
-              <span class="material-symbols-outlined">refresh</span>
-              <span>Refresh</span>
-            </button>
-          </div>
-          <div class="list-container" id="historyList">
-            <!-- History will be populated dynamically -->
           </div>
         </section>
 

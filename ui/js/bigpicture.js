@@ -338,20 +338,6 @@ function initNavigation() {
     launchNebot.addEventListener('click', () => navigateTo('nebula://nebot'));
   }
   
-  // History section buttons
-  const clearHistoryBtn = document.getElementById('clearHistoryBtn');
-  if (clearHistoryBtn) {
-    clearHistoryBtn.addEventListener('click', clearHistory);
-  }
-  
-  const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
-  if (refreshHistoryBtn) {
-    refreshHistoryBtn.addEventListener('click', async () => {
-      await loadHistory();
-      showToast('History refreshed');
-    });
-  }
-
   // Bookmarks actions
   const addBookmarkBtn = document.getElementById('addBookmarkBtn');
   if (addBookmarkBtn) {
@@ -1481,8 +1467,6 @@ async function loadHistory() {
       const stored = localStorage.getItem('siteHistory');
       state.history = stored ? JSON.parse(stored) : [];
     }
-    renderHistory();
-    renderRecentSites();
   } catch (err) {
     console.error('[BigPicture] Failed to load history:', err);
     state.history = [];
@@ -1505,8 +1489,6 @@ async function saveToHistory(url) {
       if (history.length > 100) history = history.slice(0, 100);
       localStorage.setItem('siteHistory', JSON.stringify(history));
       state.history = history;
-      renderHistory();
-      renderRecentSites();
     }
   } catch (err) {
     console.error('[BigPicture] Failed to save history:', err);
@@ -1522,8 +1504,6 @@ async function clearHistory() {
       localStorage.removeItem('siteHistory');
     }
     state.history = [];
-    renderHistory();
-    renderRecentSites();
     showToast('History cleared');
   } catch (err) {
     console.error('[BigPicture] Failed to clear history:', err);
@@ -2484,8 +2464,6 @@ async function clearAllBrowsingData() {
     // Also clear localStorage
     localStorage.removeItem('siteHistory');
     state.history = [];
-    renderHistory();
-    renderRecentSites();
     
     showToast('All browsing data cleared');
     playSelectSound();
@@ -2503,8 +2481,6 @@ async function clearBrowsingHistory() {
     
     localStorage.removeItem('siteHistory');
     state.history = [];
-    renderHistory();
-    renderRecentSites();
     
     showToast('Browsing history cleared');
     playSelectSound();

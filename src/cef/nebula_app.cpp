@@ -18,7 +18,7 @@ public:
         UNREFERENCED_PARAMETER(object);
         UNREFERENCED_PARAMETER(retval);
 
-        if (name != "postMessage") {
+        if (name != "postMessage" && name != "sendToHost" && name != "send") {
             return false;
         }
 
@@ -88,12 +88,24 @@ void NebulaApp::OnContextCreated(CefRefPtr<CefBrowser> browser,
     UNREFERENCED_PARAMETER(frame);
 
     CefRefPtr<CefV8Value> global = context->GetGlobal();
+    CefRefPtr<NativeBridgeHandler> handler = new NativeBridgeHandler();
     CefRefPtr<CefV8Value> native = CefV8Value::CreateObject(nullptr, nullptr);
     native->SetValue(
         "postMessage",
-        CefV8Value::CreateFunction("postMessage", new NativeBridgeHandler()),
+        CefV8Value::CreateFunction("postMessage", handler),
         V8_PROPERTY_ATTRIBUTE_NONE);
     global->SetValue("nebulaNative", native, V8_PROPERTY_ATTRIBUTE_READONLY);
+
+    CefRefPtr<CefV8Value> electron_api = CefV8Value::CreateObject(nullptr, nullptr);
+    electron_api->SetValue(
+        "sendToHost",
+        CefV8Value::CreateFunction("sendToHost", handler),
+        V8_PROPERTY_ATTRIBUTE_NONE);
+    electron_api->SetValue(
+        "send",
+        CefV8Value::CreateFunction("send", handler),
+        V8_PROPERTY_ATTRIBUTE_NONE);
+    global->SetValue("electronAPI", electron_api, V8_PROPERTY_ATTRIBUTE_READONLY);
 }
 
 }  // namespace nebula::cef

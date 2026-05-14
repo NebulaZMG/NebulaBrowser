@@ -33,6 +33,7 @@ public:
     void OnContentTitleChanged(CefRefPtr<CefBrowser> browser, const std::string& title) override;
     void OnContentLoadingStateChanged(CefRefPtr<CefBrowser> browser, bool is_loading) override;
     void OnContentLoadProgressChanged(CefRefPtr<CefBrowser> browser, double progress) override;
+    void OnContentLoadFinished(CefRefPtr<CefBrowser> browser, const std::string& url) override;
     void OnContentFaviconChanged(CefRefPtr<CefBrowser> browser, const std::vector<std::string>& urls) override;
     void OnContentFullscreenChanged(CefRefPtr<CefBrowser> browser, bool fullscreen) override;
     void OnPopupRequested(CefRefPtr<CefBrowser> browser, const std::string& target_url) override;
@@ -54,6 +55,8 @@ private:
     void SetContentFullscreen(bool fullscreen);
     void ResizeBrowsers();
     void SendChromeState(const nebula::browser::NebulaTab& tab);
+    void RecordSiteHistory(const std::string& url);
+    void InjectSettingsHistory(CefRefPtr<CefBrowser> browser);
     void PersistSession() const;
     void MaybeFinishShutdown();
 
@@ -72,6 +75,7 @@ private:
     CefRefPtr<nebula::cef::NebulaBrowserClient> content_client_;
     CefRefPtr<nebula::cef::NebulaBrowserClient> menu_popup_client_;
     std::unordered_set<std::string> insecure_warning_bypasses_;
+    std::vector<std::string> site_history_;
 };
 
 }  // namespace nebula::app

@@ -534,6 +534,12 @@
 
     async function clearSiteHistory() {
       try {
+        if (window.electronAPI && typeof window.electronAPI.sendToHost === 'function') {
+          window.electronAPI.sendToHost('clear-site-history');
+        } else if (window.nebulaNative && typeof window.nebulaNative.postMessage === 'function') {
+          window.nebulaNative.postMessage('clear-site-history');
+        }
+
         // Clear from localStorage
         localStorage.removeItem('siteHistory');
         console.log('[SETTINGS DEBUG] Cleared site history from localStorage');
