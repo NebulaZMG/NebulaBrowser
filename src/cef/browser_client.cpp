@@ -9,6 +9,14 @@ namespace {
 
 constexpr char kChromeCommandMessage[] = "NebulaChromeCommand";
 
+bool IsInsecureInterstitialFrame(CefRefPtr<CefFrame> frame) {
+    if (!frame) {
+        return false;
+    }
+
+    return nebula::ui::ToInternalUrl(frame->GetURL().ToString()).starts_with("nebula://insecure");
+}
+
 std::vector<std::string> ToStringVector(const std::vector<CefString>& values) {
     std::vector<std::string> result;
     result.reserve(values.size());
@@ -29,17 +37,25 @@ bool NebulaBrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser
                                                    CefRefPtr<CefProcessMessage> message) {
     CEF_REQUIRE_UI_THREAD();
     UNREFERENCED_PARAMETER(browser);
-    UNREFERENCED_PARAMETER(frame);
     UNREFERENCED_PARAMETER(source_process);
 
-    if ((role_ != BrowserRole::Chrome && role_ != BrowserRole::MenuPopup) || !message ||
-        message->GetName().ToString() != kChromeCommandMessage) {
+    if (!message || message->GetName().ToString() != kChromeCommandMessage) {
+        return false;
+    }
+
+    if (role_ != BrowserRole::Chrome && role_ != BrowserRole::MenuPopup &&
+        role_ != BrowserRole::Content) {
         return false;
     }
 
     CefRefPtr<CefListValue> args = message->GetArgumentList();
     const std::string command = args && args->GetSize() > 0 ? args->GetString(0).ToString() : "";
     const std::string payload = args && args->GetSize() > 1 ? args->GetString(1).ToString() : "";
+    if (role_ == BrowserRole::Content &&
+        (command != "navigate-insecure" || !IsInsecureInterstitialFrame(frame))) {
+        return false;
+    }
+
     if (delegate_ && !command.empty()) {
         delegate_->OnChromeCommand(command, payload);
         return true;
@@ -172,9 +188,14 @@ void NebulaBrowserClient::OnLoadEnd(CefRefPtr<CefBrowser> browser,
                                     CefRefPtr<CefFrame> frame,
                                     int httpStatusCode) {
     CEF_REQUIRE_UI_THREAD();
-    UNREFERENCED_PARAMETER(httpStatusCode);
 
     if (role_ == BrowserRole::Content && delegate_ && frame && frame->IsMain()) {
+        if (httpStatusCode == 404) {
+            frame->LoadURL(nebula::ui::ResolveInternalUrl(
+                nebula::ui::GetNotFoundUrl(frame->GetURL().ToString())));
+            return;
+        }
+
         delegate_->OnContentLoadProgressChanged(browser, 1.0);
     }
 }
@@ -189,10 +210,24 @@ bool NebulaBrowserClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
     UNREFERENCED_PARAMETER(user_gesture);
     UNREFERENCED_PARAMETER(is_redirect);
 
-    if (role_ == BrowserRole::Content && frame && frame->IsMain() && request &&
-        nebula::ui::IsChromiumNewTabUrl(request->GetURL().ToString())) {
-        frame->LoadURL(nebula::ui::GetHomeUrl());
-        return true;
+    if (role_ == BrowserRole::Content && frame && frame->IsMain() && request) {
+        const std::string url = request->GetURL().ToString();
+        if (nebula::ui::IsChromiumNewTabUrl(url)) {
+            frame->LoadURL(nebula::ui::ResolveInternalUrl(nebula::ui::GetHomeUrl()));
+            return true;
+        }
+
+        if (nebula::ui::IsNebulaInternalUrl(url)) {
+            frame->LoadURL(nebula::ui::ResolveInternalUrl(url));
+            return true;
+        }
+
+        if (nebula::ui::IsHttpUrl(url) &&
+            (!delegate_ || !delegate_->ShouldBypassInsecureWarning(browser, url))) {
+            frame->LoadURL(nebula::ui::ResolveInternalUrl(
+                nebula::ui::GetInsecureWarningUrl(url)));
+            return true;
+        }
     }
 
     return false;

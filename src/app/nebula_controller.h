@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "browser/tab_manager.h"
@@ -34,6 +35,7 @@ public:
     void OnContentLoadProgressChanged(CefRefPtr<CefBrowser> browser, double progress) override;
     void OnContentFaviconChanged(CefRefPtr<CefBrowser> browser, const std::vector<std::string>& urls) override;
     void OnPopupRequested(CefRefPtr<CefBrowser> browser, const std::string& target_url) override;
+    bool ShouldBypassInsecureWarning(CefRefPtr<CefBrowser> browser, const std::string& target_url) override;
 
 private:
     void CreateNewTab();
@@ -65,6 +67,7 @@ private:
     CefRefPtr<nebula::cef::NebulaBrowserClient> chrome_client_;
     CefRefPtr<nebula::cef::NebulaBrowserClient> content_client_;
     CefRefPtr<nebula::cef::NebulaBrowserClient> menu_popup_client_;
+    std::unordered_set<std::string> insecure_warning_bypasses_;
 };
 
 }  // namespace nebula::app

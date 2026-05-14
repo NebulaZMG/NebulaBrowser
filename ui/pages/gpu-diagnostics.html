@@ -1,231 +1,464 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GPU Diagnostics - Nebula Browser</title>
     <style>
+        :root {
+            color-scheme: dark;
+            --bg: #0b0d10;
+            --panel: #151922;
+            --panel-soft: #1d2330;
+            --text: #eef2ff;
+            --muted: #9aa7bd;
+            --good: #2fbf71;
+            --warn: #f4b740;
+            --bad: #ef5b5b;
+            --accent: #7b2eff;
+            --border: rgba(255, 255, 255, 0.12);
+        }
+
+        * { box-sizing: border-box; }
+
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background: #f5f5f5;
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at top left, rgba(123, 46, 255, 0.26), transparent 32rem),
+                radial-gradient(circle at bottom right, rgba(0, 198, 255, 0.18), transparent 30rem),
+                var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
+
         .container {
-            max-width: 800px;
+            width: min(1100px, calc(100vw - 32px));
             margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 32px 0;
         }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        h1, h2, h3, p { margin-top: 0; }
+
+        h1 {
+            margin-bottom: 8px;
+            font-size: clamp(2rem, 4vw, 3.4rem);
+        }
+
+        .lede {
+            max-width: 720px;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+        }
+
+        .card {
+            background: color-mix(in srgb, var(--panel) 88%, transparent);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 18px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
+        }
+
         .status {
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: var(--panel-soft);
+            color: var(--muted);
+            font-weight: 650;
         }
-        .status.good { background: #d4edda; color: #155724; }
-        .status.warning { background: #fff3cd; color: #856404; }
-        .status.error { background: #f8d7da; color: #721c24; }
+
+        .status::before {
+            content: "";
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .good { color: var(--good); }
+        .warning { color: var(--warn); }
+        .error { color: var(--bad); }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            margin: 12px 0;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            background: #03050a;
+        }
+
         button {
-            background: #007bff;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
+            border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+            border-radius: 12px;
+            background: color-mix(in srgb, var(--accent) 26%, var(--panel));
+            color: var(--text);
             cursor: pointer;
-            margin: 5px;
+            font: inherit;
+            font-weight: 650;
+            padding: 10px 14px;
         }
-        button:hover { background: #0056b3; }
+
+        button:hover {
+            filter: brightness(1.12);
+        }
+
+        dl {
+            display: grid;
+            grid-template-columns: minmax(130px, auto) 1fr;
+            gap: 8px 12px;
+            margin: 0;
+        }
+
+        dt {
+            color: var(--muted);
+        }
+
+        dd {
+            margin: 0;
+            overflow-wrap: anywhere;
+        }
+
         pre {
-            background: #f8f9fa;
-            padding: 10px;
-            border-radius: 4px;
-            overflow-x: auto;
+            max-height: 420px;
+            overflow: auto;
+            margin: 0;
+            padding: 14px;
+            border-radius: 14px;
+            background: #05070d;
+            color: #d6e2ff;
             font-size: 12px;
-        }
-        .canvas-test {
-            border: 1px solid #ccc;
-            margin: 10px 0;
+            line-height: 1.5;
+            white-space: pre-wrap;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>GPU Diagnostics</h1>
-        
-        <div id="gpu-status" class="status">
-            <h3>GPU Status</h3>
-            <p>Loading GPU information...</p>
-        </div>
+    <main class="container">
+        <header>
+            <div>
+                <h1>GPU Diagnostics</h1>
+                <p class="lede">
+                    Quick CEF-compatible checks for WebGL, WebGL2, Canvas 2D, GPU renderer strings,
+                    and browser runtime details. Use this page to verify graphics support after GPU
+                    flag or runtime changes.
+                </p>
+            </div>
+            <button id="refresh-button" type="button">Run Again</button>
+        </header>
 
-        <div class="status">
-            <h3>WebGL Test</h3>
-            <canvas id="webgl-canvas" class="canvas-test" width="300" height="150"></canvas>
-            <p id="webgl-status">Testing WebGL...</p>
-        </div>
+        <section class="grid" aria-label="GPU test summary">
+            <article class="card">
+                <div id="overall-status" class="status">Waiting</div>
+                <h2>Summary</h2>
+                <dl id="summary-list"></dl>
+            </article>
 
-        <div class="status">
-            <h3>Canvas 2D Acceleration Test</h3>
-            <canvas id="canvas2d" class="canvas-test" width="300" height="150"></canvas>
-            <p id="canvas2d-status">Testing Canvas 2D...</p>
-        </div>
+            <article class="card">
+                <div id="webgl-status" class="status">Waiting</div>
+                <h2>WebGL</h2>
+                <canvas id="webgl-canvas" width="480" height="240"></canvas>
+                <p id="webgl-message"></p>
+            </article>
 
-        <div>
-            <h3>Actions</h3>
-            <button onclick="refreshGPUInfo()">Refresh GPU Info</button>
-            <button onclick="forceGC()">Force Garbage Collection</button>
-            <button onclick="applyFallback(1)">Apply GPU Fallback Level 1</button>
-            <button onclick="applyFallback(2)">Apply GPU Fallback Level 2</button>
-        </div>
+            <article class="card">
+                <div id="webgl2-status" class="status">Waiting</div>
+                <h2>WebGL2</h2>
+                <canvas id="webgl2-canvas" width="480" height="240"></canvas>
+                <p id="webgl2-message"></p>
+            </article>
 
-        <div>
-            <h3>Detailed GPU Information</h3>
-            <pre id="gpu-details">Loading...</pre>
-        </div>
-    </div>
+            <article class="card">
+                <div id="canvas2d-status" class="status">Waiting</div>
+                <h2>Canvas 2D</h2>
+                <canvas id="canvas2d" width="480" height="240"></canvas>
+                <p id="canvas2d-message"></p>
+            </article>
+        </section>
+
+        <section class="card" style="margin-top: 16px;">
+            <h2>Detailed Information</h2>
+            <pre id="gpu-details">Waiting for diagnostics...</pre>
+        </section>
+    </main>
 
     <script>
-        async function refreshGPUInfo() {
-            try {
-                if (!window.electronAPI?.invoke) {
-                    const statusDiv = document.getElementById('gpu-status');
-                    const detailsDiv = document.getElementById('gpu-details');
-                    statusDiv.className = 'status warning';
-                    statusDiv.innerHTML = '<h3>GPU Status</h3><p>Native GPU diagnostics are not exposed to this CEF page.</p>';
-                    detailsDiv.textContent = navigator.userAgent;
-                    return;
-                }
-                const gpuInfo = await window.electronAPI.invoke('get-gpu-info');
-                const statusDiv = document.getElementById('gpu-status');
-                const detailsDiv = document.getElementById('gpu-details');
-                
-                if (gpuInfo.error) {
-                    statusDiv.className = 'status error';
-                    statusDiv.innerHTML = `<h3>GPU Status</h3><p>Error: ${gpuInfo.error}</p>`;
-                } else {
-                    const isGPUWorking = checkGPUFeatures(gpuInfo.featureStatus);
-                    statusDiv.className = `status ${isGPUWorking ? 'good' : 'warning'}`;
-                    statusDiv.innerHTML = `
-                        <h3>GPU Status</h3>
-                        <p><strong>Hardware Acceleration:</strong> ${isGPUWorking ? 'Enabled' : 'Disabled/Limited'}</p>
-                        <p><strong>Fallback Level:</strong> ${gpuInfo.fallbackStatus?.fallbackLevel || 0}</p>
-                        <p><strong>GPU Enabled:</strong> ${gpuInfo.fallbackStatus?.gpuEnabled ? 'Yes' : 'No'}</p>
-                    `;
-                }
-                
-                detailsDiv.textContent = JSON.stringify(gpuInfo, null, 2);
-            } catch (err) {
-                console.error('Failed to get GPU info:', err);
-                document.getElementById('gpu-status').innerHTML = `<h3>GPU Status</h3><p>Error: ${err.message}</p>`;
+        function setStatus(id, level, text) {
+            const element = document.getElementById(id);
+            element.className = `status ${level}`;
+            element.textContent = text;
+        }
+
+        function setMessage(id, text) {
+            document.getElementById(id).textContent = text;
+        }
+
+        function formatValue(value) {
+            if (value === undefined || value === null || value === '') return 'Unavailable';
+            if (Array.isArray(value)) return value.length ? value.join(', ') : 'Unavailable';
+            return String(value);
+        }
+
+        function collectContextAttributes(gl) {
+            const attributes = gl.getContextAttributes?.();
+            if (!attributes) return {};
+            return {
+                alpha: attributes.alpha,
+                antialias: attributes.antialias,
+                depth: attributes.depth,
+                desynchronized: attributes.desynchronized,
+                failIfMajorPerformanceCaveat: attributes.failIfMajorPerformanceCaveat,
+                powerPreference: attributes.powerPreference,
+                premultipliedAlpha: attributes.premultipliedAlpha,
+                preserveDrawingBuffer: attributes.preserveDrawingBuffer,
+                stencil: attributes.stencil
+            };
+        }
+
+        function collectRendererInfo(gl) {
+            const info = {
+                version: gl.getParameter(gl.VERSION),
+                shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+                vendor: gl.getParameter(gl.VENDOR),
+                renderer: gl.getParameter(gl.RENDERER),
+                maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+                maxRenderbufferSize: gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),
+                maxViewportDims: Array.from(gl.getParameter(gl.MAX_VIEWPORT_DIMS)),
+                contextAttributes: collectContextAttributes(gl)
+            };
+
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugInfo) {
+                info.unmaskedVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                info.unmaskedRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
             }
+
+            return info;
         }
 
-        function checkGPUFeatures(features) {
-            const criticalFeatures = ['gpu_compositing', 'webgl', 'webgl2'];
-            return criticalFeatures.some(feature => 
-                features[feature] && !features[feature].includes('disabled')
-            );
-        }
-
-        async function forceGC() {
-            try {
-                if (!window.electronAPI?.invoke) {
-                    alert('Garbage collection is managed by CEF in this build.');
-                    return;
-                }
-                await window.electronAPI.invoke('force-gc');
-                alert('Garbage collection completed');
-            } catch (err) {
-                alert('Failed to force GC: ' + err.message);
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                const log = gl.getShaderInfoLog(shader) || 'Unknown shader compile error';
+                gl.deleteShader(shader);
+                throw new Error(log);
             }
+            return shader;
         }
 
-        async function applyFallback(level) {
-            try {
-                if (!window.electronAPI?.invoke) {
-                    alert('GPU fallback settings are managed by the native CEF app.');
-                    return;
-                }
-                const result = await window.electronAPI.invoke('apply-gpu-fallback', level);
-                if (result.success) {
-                    alert(`Applied GPU fallback level ${level}. App restart may be required.`);
-                } else {
-                    alert('Failed to apply fallback: ' + result.error);
-                }
-            } catch (err) {
-                alert('Failed to apply fallback: ' + err.message);
+        function drawWebGL(canvasId, version) {
+            const canvas = document.getElementById(canvasId);
+            const contextNames = version === 2
+                ? ['webgl2']
+                : ['webgl', 'experimental-webgl'];
+            const gl = contextNames.map(name => canvas.getContext(name)).find(Boolean);
+            if (!gl) {
+                return { ok: false, error: `WebGL${version === 2 ? '2' : ''} context unavailable` };
             }
-        }
 
-        // Test WebGL
-        function testWebGL() {
-            const canvas = document.getElementById('webgl-canvas');
-            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-            const status = document.getElementById('webgl-status');
-            
-            if (gl) {
-                // Draw a simple triangle
-                const vertexShader = gl.createShader(gl.VERTEX_SHADER);
-                gl.shaderSource(vertexShader, `
-                    attribute vec2 position;
-                    void main() {
-                        gl_Position = vec4(position, 0.0, 1.0);
-                    }
-                `);
-                gl.compileShader(vertexShader);
-                
-                const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-                gl.shaderSource(fragmentShader, `
-                    precision mediump float;
-                    void main() {
-                        gl_Color = vec4(0.0, 1.0, 0.0, 1.0);
-                    }
-                `);
-                gl.compileShader(fragmentShader);
-                
-                status.textContent = 'WebGL: Available ✓';
-                status.parentElement.className = 'status good';
-                
-                // Clear with green color to show it's working
-                gl.clearColor(0.0, 0.8, 0.0, 1.0);
-                gl.clear(gl.COLOR_BUFFER_BIT);
-            } else {
-                status.textContent = 'WebGL: Not Available ✗';
-                status.parentElement.className = 'status error';
+            const vertexSource = version === 2
+                ? `#version 300 es
+                   in vec2 position;
+                   void main() {
+                     gl_Position = vec4(position, 0.0, 1.0);
+                   }`
+                : `attribute vec2 position;
+                   void main() {
+                     gl_Position = vec4(position, 0.0, 1.0);
+                   }`;
+
+            const fragmentSource = version === 2
+                ? `#version 300 es
+                   precision mediump float;
+                   out vec4 outColor;
+                   void main() {
+                     outColor = vec4(0.12, 0.85, 0.48, 1.0);
+                   }`
+                : `precision mediump float;
+                   void main() {
+                     gl_FragColor = vec4(0.12, 0.85, 0.48, 1.0);
+                   }`;
+
+            const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
+            const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+            const program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                throw new Error(gl.getProgramInfoLog(program) || 'Unknown WebGL link error');
             }
+
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(
+                gl.ARRAY_BUFFER,
+                new Float32Array([-0.85, -0.75, 0.85, -0.75, 0.0, 0.85]),
+                gl.STATIC_DRAW);
+
+            const position = gl.getAttribLocation(program, 'position');
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.clearColor(0.03, 0.05, 0.1, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.useProgram(program);
+            gl.enableVertexAttribArray(position);
+            gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+            return {
+                ok: true,
+                renderer: collectRendererInfo(gl)
+            };
         }
 
-        // Test Canvas 2D
         function testCanvas2D() {
             const canvas = document.getElementById('canvas2d');
             const ctx = canvas.getContext('2d');
-            const status = document.getElementById('canvas2d-status');
-            
-            try {
-                // Draw some graphics to test acceleration
-                const gradient = ctx.createLinearGradient(0, 0, 300, 0);
-                gradient.addColorStop(0, '#ff0000');
-                gradient.addColorStop(1, '#0000ff');
-                
-                ctx.fillStyle = gradient;
-                ctx.fillRect(0, 0, 300, 150);
-                
-                ctx.fillStyle = 'white';
-                ctx.font = '20px Arial';
-                ctx.fillText('Canvas 2D Working!', 50, 80);
-                
-                status.textContent = 'Canvas 2D: Working ✓';
-                status.parentElement.className = 'status good';
-            } catch (err) {
-                status.textContent = 'Canvas 2D: Error - ' + err.message;
-                status.parentElement.className = 'status error';
+            if (!ctx) {
+                return { ok: false, error: 'Canvas 2D context unavailable' };
             }
+
+            const start = performance.now();
+            const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+            gradient.addColorStop(0, '#7b2eff');
+            gradient.addColorStop(0.55, '#00c6ff');
+            gradient.addColorStop(1, '#2fbf71');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            for (let i = 0; i < 900; i += 1) {
+                const x = (i * 29) % canvas.width;
+                const y = (i * 47) % canvas.height;
+                ctx.fillStyle = `rgba(${(i * 3) % 255}, ${(i * 7) % 255}, 255, 0.17)`;
+                ctx.beginPath();
+                ctx.arc(x, y, 10 + (i % 16), 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '600 26px system-ui, sans-serif';
+            ctx.fillText('Canvas 2D OK', 24, 54);
+
+            return {
+                ok: true,
+                drawTimeMs: Math.round((performance.now() - start) * 100) / 100
+            };
         }
 
-        // Initialize tests
-        window.addEventListener('DOMContentLoaded', () => {
-            refreshGPUInfo();
-            testWebGL();
-            testCanvas2D();
-        });
+        function renderSummary(info) {
+            const rows = [
+                ['WebGL', info.webgl.ok ? 'Available' : 'Unavailable'],
+                ['WebGL2', info.webgl2.ok ? 'Available' : 'Unavailable'],
+                ['Canvas 2D', info.canvas2d.ok ? `Working (${info.canvas2d.drawTimeMs} ms)` : 'Unavailable'],
+                ['Renderer', info.webgl.renderer?.unmaskedRenderer || info.webgl2.renderer?.unmaskedRenderer || info.webgl.renderer?.renderer],
+                ['Vendor', info.webgl.renderer?.unmaskedVendor || info.webgl2.renderer?.unmaskedVendor || info.webgl.renderer?.vendor],
+                ['User Agent', navigator.userAgent]
+            ];
+
+            const summaryList = document.getElementById('summary-list');
+            summaryList.replaceChildren();
+            rows.forEach(([label, value]) => {
+                const term = document.createElement('dt');
+                const description = document.createElement('dd');
+                term.textContent = label;
+                description.textContent = formatValue(value);
+                summaryList.append(term, description);
+            });
+        }
+
+        function runDiagnostics() {
+            const info = {
+                generatedAt: new Date().toISOString(),
+                pageUrl: location.href,
+                browser: {
+                    userAgent: navigator.userAgent,
+                    platform: navigator.platform,
+                    language: navigator.language,
+                    hardwareConcurrency: navigator.hardwareConcurrency,
+                    deviceMemoryGb: navigator.deviceMemory,
+                    maxTouchPoints: navigator.maxTouchPoints,
+                    webdriver: navigator.webdriver
+                },
+                screen: {
+                    width: screen.width,
+                    height: screen.height,
+                    availWidth: screen.availWidth,
+                    availHeight: screen.availHeight,
+                    colorDepth: screen.colorDepth,
+                    pixelDepth: screen.pixelDepth,
+                    devicePixelRatio: window.devicePixelRatio
+                },
+                webgl: {},
+                webgl2: {},
+                canvas2d: {}
+            };
+
+            try {
+                info.webgl = drawWebGL('webgl-canvas', 1);
+                setStatus('webgl-status', info.webgl.ok ? 'good' : 'error', info.webgl.ok ? 'Available' : 'Unavailable');
+                setMessage('webgl-message', info.webgl.ok
+                    ? formatValue(info.webgl.renderer.unmaskedRenderer || info.webgl.renderer.renderer)
+                    : info.webgl.error);
+            } catch (error) {
+                info.webgl = { ok: false, error: error.message };
+                setStatus('webgl-status', 'error', 'Failed');
+                setMessage('webgl-message', error.message);
+            }
+
+            try {
+                info.webgl2 = drawWebGL('webgl2-canvas', 2);
+                setStatus('webgl2-status', info.webgl2.ok ? 'good' : 'warning', info.webgl2.ok ? 'Available' : 'Unavailable');
+                setMessage('webgl2-message', info.webgl2.ok
+                    ? formatValue(info.webgl2.renderer.unmaskedRenderer || info.webgl2.renderer.renderer)
+                    : info.webgl2.error);
+            } catch (error) {
+                info.webgl2 = { ok: false, error: error.message };
+                setStatus('webgl2-status', 'warning', 'Failed');
+                setMessage('webgl2-message', error.message);
+            }
+
+            try {
+                info.canvas2d = testCanvas2D();
+                setStatus('canvas2d-status', info.canvas2d.ok ? 'good' : 'error', info.canvas2d.ok ? 'Working' : 'Unavailable');
+                setMessage('canvas2d-message', info.canvas2d.ok
+                    ? `Draw stress test completed in ${info.canvas2d.drawTimeMs} ms.`
+                    : info.canvas2d.error);
+            } catch (error) {
+                info.canvas2d = { ok: false, error: error.message };
+                setStatus('canvas2d-status', 'error', 'Failed');
+                setMessage('canvas2d-message', error.message);
+            }
+
+            const healthy = info.webgl.ok && info.canvas2d.ok;
+            setStatus('overall-status', healthy ? 'good' : 'warning', healthy ? 'GPU Path Looks Good' : 'GPU Path Limited');
+            renderSummary(info);
+            document.getElementById('gpu-details').textContent = JSON.stringify(info, null, 2);
+        }
+
+        document.getElementById('refresh-button').addEventListener('click', runDiagnostics);
+        window.addEventListener('DOMContentLoaded', runDiagnostics);
     </script>
 </body>
 </html>

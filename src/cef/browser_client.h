@@ -31,6 +31,7 @@ public:
     virtual void OnContentLoadProgressChanged(CefRefPtr<CefBrowser> browser, double progress) = 0;
     virtual void OnContentFaviconChanged(CefRefPtr<CefBrowser> browser, const std::vector<std::string>& urls) = 0;
     virtual void OnPopupRequested(CefRefPtr<CefBrowser> browser, const std::string& target_url) = 0;
+    virtual bool ShouldBypassInsecureWarning(CefRefPtr<CefBrowser> browser, const std::string& target_url) = 0;
 };
 
 class NebulaBrowserClient final : public CefClient,

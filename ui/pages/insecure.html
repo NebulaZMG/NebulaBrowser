@@ -62,6 +62,10 @@
   const box = document.getElementById('targetBox');
   if (target) box.textContent = target;
   function sendNavigate(url, opts){
+    if (opts && opts.insecureBypass && window.nebulaNative && window.nebulaNative.postMessage){
+      window.nebulaNative.postMessage('navigate-insecure', url);
+      return;
+    }
     if (window.electronAPI && window.electronAPI.sendToHost){
       window.electronAPI.sendToHost('navigate', url, opts||{});
     } else if (window.parent && window.parent !== window) {

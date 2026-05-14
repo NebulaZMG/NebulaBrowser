@@ -88,7 +88,7 @@ function applySelectedSearchEngine(engine) {
 function normalizeNavigationUrl(input) {
   const value = (input || '').trim();
   if (!value) return null;
-  if (/^(https?:|file:|data:|blob:)/i.test(value)) return value;
+  if (/^(https?:|file:|data:|blob:|nebula:\/\/)/i.test(value)) return value;
   if (value.includes('.') && !/\s/.test(value)) return `https://${value}`;
   return `${searchEngines[selectedSearchEngine]}${encodeURIComponent(value)}`;
 }

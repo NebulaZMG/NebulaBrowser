@@ -15,7 +15,7 @@ const state = {
 function toNavigationUrl(input) {
   const value = (input || '').trim();
   if (!value) return null;
-  if (/^(https?:|file:|data:|blob:|chrome:)/i.test(value)) return value;
+  if (/^(https?:|file:|data:|blob:|chrome:|nebula:\/\/)/i.test(value)) return value;
   if (value.includes('.') && !/\s/.test(value)) return `https://${value}`;
   return `${SEARCH_URL}${encodeURIComponent(value)}`;
 }

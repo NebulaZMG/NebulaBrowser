@@ -1,6 +1,7 @@
 #include "browser/tab_manager.h"
 
 #include "browser/url_utils.h"
+#include "ui/paths.h"
 
 namespace nebula::browser {
 
@@ -134,7 +135,7 @@ void TabManager::LoadURL(const std::string& input) {
 
     tab->url = target;
     tab->favicon_url.clear();
-    tab->browser->GetMainFrame()->LoadURL(target);
+    tab->browser->GetMainFrame()->LoadURL(nebula::ui::ResolveInternalUrl(target));
     Notify();
 }
 

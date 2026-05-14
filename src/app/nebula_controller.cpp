@@ -55,7 +55,7 @@ RECT MenuPopupRect(HWND hwnd, const nebula::window::BrowserLayout& layout) {
     GetClientRect(hwnd, &client);
 
     const int width = ScaleForWindow(hwnd, 260);
-    const int height = ScaleForWindow(hwnd, 218);
+    const int height = ScaleForWindow(hwnd, 258);
     const int margin = ScaleForWindow(hwnd, 12);
     const int overlap = ScaleForWindow(hwnd, 2);
 
@@ -101,6 +101,10 @@ std::string WithCacheBuster(std::string url) {
 
     const char separator = url.find('?') == std::string::npos ? '?' : '&';
     return url + separator + "nebula_cache_bust=" + std::to_string(GetTickCount64()) + fragment;
+}
+
+std::string GetChromeDisplayUrl(const std::string& url) {
+    return nebula::ui::IsInternalHomeUrl(url) ? std::string{} : url;
 }
 
 void SetBrowserVisible(CefRefPtr<CefBrowser> browser, bool visible) {
@@ -209,6 +213,12 @@ void NebulaController::OnBrowserClosing(nebula::cef::BrowserRole role, CefRefPtr
 void NebulaController::OnChromeCommand(const std::string& command, const std::string& payload) {
     if (command == "navigate") {
         tabs_.LoadURL(payload);
+    } else if (command == "navigate-insecure") {
+        const std::string target = nebula::browser::NormalizeNavigationInput(payload);
+        if (nebula::ui::IsHttpUrl(target)) {
+            insecure_warning_bypasses_.insert(target);
+            tabs_.LoadURL(target);
+        }
     } else if (command == "new-tab") {
         CreateNewTab();
     } else if (command == "activate-tab") {
@@ -233,6 +243,9 @@ void NebulaController::OnChromeCommand(const std::string& command, const std::st
     } else if (command == "big-picture") {
         CloseMenuPopup();
         tabs_.LoadURL(nebula::ui::GetBigPictureUrl());
+    } else if (command == "gpu-diagnostics") {
+        CloseMenuPopup();
+        tabs_.LoadURL(nebula::ui::GetGpuDiagnosticsUrl());
     } else if (command == "toggle-devtools") {
         ToggleDevTools();
     } else if (command == "zoom-out") {
@@ -263,7 +276,10 @@ void NebulaController::OnChromeCommand(const std::string& command, const std::st
 }
 
 void NebulaController::OnContentAddressChanged(CefRefPtr<CefBrowser> browser, const std::string& url) {
-    tabs_.UpdateURL(browser, nebula::ui::IsChromiumNewTabUrl(url) ? nebula::ui::GetHomeUrl() : url);
+    tabs_.UpdateURL(browser,
+                    nebula::ui::IsChromiumNewTabUrl(url)
+                        ? nebula::ui::GetHomeUrl()
+                        : nebula::ui::ToInternalUrl(url));
 }
 
 void NebulaController::OnContentTitleChanged(CefRefPtr<CefBrowser> browser, const std::string& title) {
@@ -294,6 +310,20 @@ void NebulaController::OnPopupRequested(CefRefPtr<CefBrowser> browser, const std
     tabs_.LoadURL(nebula::ui::IsEmptyOrChromiumNewTabUrl(target_url)
                       ? nebula::ui::GetHomeUrl()
                       : target_url);
+}
+
+bool NebulaController::ShouldBypassInsecureWarning(CefRefPtr<CefBrowser> browser, const std::string& target_url) {
+    if (!tabs_.OwnsBrowser(browser)) {
+        return false;
+    }
+
+    const auto bypass = insecure_warning_bypasses_.find(target_url);
+    if (bypass == insecure_warning_bypasses_.end()) {
+        return false;
+    }
+
+    insecure_warning_bypasses_.erase(bypass);
+    return true;
 }
 
 void NebulaController::CreateNewTab() {
@@ -376,7 +406,8 @@ void NebulaController::CreateContentBrowser() {
     CefBrowserSettings browser_settings;
     content_client_ = new nebula::cef::NebulaBrowserClient(nebula::cef::BrowserRole::Content, this);
     CefWindowInfo window_info = ChildWindowInfo(window_->hwnd(), layout.content);
-    CefBrowserHost::CreateBrowser(window_info, content_client_, url, browser_settings, nullptr, nullptr);
+    CefBrowserHost::CreateBrowser(
+        window_info, content_client_, nebula::ui::ResolveInternalUrl(url), browser_settings, nullptr, nullptr);
 }
 
 void NebulaController::ToggleMenuPopup() {
@@ -476,6 +507,7 @@ void NebulaController::SendChromeState(const nebula::browser::NebulaTab& tab) {
         return;
     }
 
+    const std::string display_url = GetChromeDisplayUrl(tab.url);
     std::string tabs_json = "[";
     const auto& tabs = tabs_.Tabs();
     for (size_t i = 0; i < tabs.size(); ++i) {
@@ -495,7 +527,7 @@ void NebulaController::SendChromeState(const nebula::browser::NebulaTab& tab) {
     const std::string script =
         "window.NebulaChrome && window.NebulaChrome.applyState({"
         "\"id\":" + std::to_string(tab.id) +
-        ",\"url\":\"" + nebula::browser::JsonEscape(tab.url) + "\""
+        ",\"url\":\"" + nebula::browser::JsonEscape(display_url) + "\""
         ",\"title\":\"" + nebula::browser::JsonEscape(tab.title) + "\""
         ",\"isLoading\":" + std::string(tab.is_loading ? "true" : "false") +
         ",\"progress\":" + std::to_string(tab.load_progress) +

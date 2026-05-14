@@ -78,26 +78,6 @@ button:disabled {
   background: var(--bg);
 }
 
-/* ── Brand ──────────────────────────────────────────────────── */
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 104px;
-  color: var(--accent-2);
-  font-size: 0.73rem;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  opacity: 0.85;
-}
-
-.brand-icon {
-  width: 17px;
-  height: 17px;
-}
-
 /* ── Tabs ───────────────────────────────────────────────────── */
 
 .tabs {

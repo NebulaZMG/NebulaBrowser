@@ -15,6 +15,7 @@ constexpr wchar_t kChildFrameHitTestParentProp[] = L"NebulaChildFrameHitTestPare
 constexpr int kTitleRowHeightDip = 42;
 constexpr int kWindowControlWidthDip = 46;
 constexpr int kWindowControlCount = 3;
+constexpr COLORREF kNoWindowBorderColor = 0xFFFFFFFE;
 
 RECT GetWorkArea() {
     RECT work_area = {};
@@ -56,6 +57,28 @@ bool SetResizeCursor(LRESULT hit) {
     return true;
 }
 
+void ApplyWindowFrameStyle(HWND hwnd) {
+    const BOOL dark_mode = TRUE;
+    const DWM_WINDOW_CORNER_PREFERENCE corner_preference = DWMWCP_ROUND;
+    DwmSetWindowAttribute(
+        hwnd,
+        DWMWA_USE_IMMERSIVE_DARK_MODE,
+        &dark_mode,
+        sizeof(dark_mode));
+
+    DwmSetWindowAttribute(
+        hwnd,
+        DWMWA_WINDOW_CORNER_PREFERENCE,
+        &corner_preference,
+        sizeof(corner_preference));
+
+    DwmSetWindowAttribute(
+        hwnd,
+        DWMWA_BORDER_COLOR,
+        &kNoWindowBorderColor,
+        sizeof(kNoWindowBorderColor));
+}
+
 }  // namespace
 
 NebulaWindow::NebulaWindow(WindowDelegate* delegate) : delegate_(delegate) {}
@@ -92,8 +115,9 @@ bool NebulaWindow::Create(HINSTANCE instance, int show_command) {
     }
 
     UpdateDpi();
+    ApplyWindowFrameStyle(hwnd_);
 
-    const MARGINS margins = {1, 1, 1, 1};
+    const MARGINS margins = {0, 0, 0, 0};
     DwmExtendFrameIntoClientArea(hwnd_, &margins);
 
     ShowWindow(hwnd_, show_command);
@@ -264,6 +288,10 @@ LRESULT NebulaWindow::WndProc(UINT message, WPARAM wparam, LPARAM lparam) {
                 return 0;
             }
             break;
+
+        case WM_NCACTIVATE:
+            ApplyWindowFrameStyle(hwnd_);
+            return TRUE;
 
         case WM_ERASEBKGND:
             return 1;

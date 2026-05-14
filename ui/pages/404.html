@@ -61,7 +61,7 @@
   const attemptedUrl = params.get('url');
   const box = document.getElementById('targetBox');
   if (attemptedUrl) {
-    box.textContent = decodeURIComponent(attemptedUrl);
+    box.textContent = attemptedUrl;
   } else {
     box.textContent = 'Unknown URL';
   }

@@ -1,5 +1,6 @@
 #include "browser/url_utils.h"
 
+#include <algorithm>
 #include <cctype>
 #include <iomanip>
 #include <sstream>
@@ -19,13 +20,17 @@ std::string Trim(std::string value) {
     return value;
 }
 
-bool StartsWithScheme(const std::string& value) {
+bool StartsWithScheme(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
     return value.starts_with("http://") ||
            value.starts_with("https://") ||
            value.starts_with("file:") ||
            value.starts_with("data:") ||
            value.starts_with("blob:") ||
-           value.starts_with("chrome:");
+           value.starts_with("chrome:") ||
+           value.starts_with("nebula://");
 }
 
 bool LooksLikeHostName(const std::string& value) {
