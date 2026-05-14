@@ -174,6 +174,11 @@ std::filesystem::path GetCacheDirectory() {
     return cache;
 }
 
+std::filesystem::path GetSessionStatePath() {
+    auto user_data = GetUserDataDirectory();
+    return user_data.empty() ? std::filesystem::path{} : user_data / L"session_state.json";
+}
+
 std::filesystem::path GetUiPagePath(const std::wstring& page_name) {
     const auto exe_dir = GetExecutableDirectory();
     if (exe_dir.empty()) {

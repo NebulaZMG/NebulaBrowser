@@ -6,9 +6,11 @@
 #include <charconv>
 #include <system_error>
 
+#include "browser/session_state.h"
 #include "browser/url_utils.h"
 #include "include/cef_app.h"
 #include "include/cef_browser.h"
+#include "include/cef_cookie.h"
 #include "include/wrapper/cef_helpers.h"
 #include "ui/paths.h"
 
@@ -37,6 +39,10 @@ CefWindowInfo ChildWindowInfo(HWND parent, const RECT& rect) {
             rect.top,
             rect.right - rect.left,
             rect.bottom - rect.top));
+    // CEF defaults to the Chrome runtime style, which ignores the
+    // SetAsChild hint and creates a top-level window per browser. Force the
+    // Alloy runtime style so each browser embeds inside the Nebula HWND.
+    info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
     return info;
 }
 
@@ -145,7 +151,17 @@ bool NebulaController::Create() {
 }
 
 void NebulaController::OnWindowCreated() {
-    tabs_.CreateInitialTab(initial_url_.empty() ? nebula::ui::GetHomeUrl() : initial_url_);
+    if (initial_url_.empty()) {
+        const auto session = nebula::browser::LoadSessionState();
+        if (!session.tabs.empty()) {
+            tabs_.RestoreTabs(session.tabs, session.active_tab_index);
+        } else {
+            tabs_.CreateInitialTab(nebula::ui::GetHomeUrl());
+        }
+    } else {
+        tabs_.CreateInitialTab(initial_url_);
+    }
+
     CreateChromeBrowser();
     CreateContentBrowser();
 }
@@ -157,11 +173,23 @@ void NebulaController::OnWindowResized(const nebula::window::BrowserLayout& layo
 
 void NebulaController::OnWindowCloseRequested() {
     if (closing_) {
+        // CEF re-sends WM_CLOSE to the top-level window after each Alloy
+        // child browser finishes its JS unload + DoClose phase. Destroy the
+        // Nebula window now so CEF can tear down the child browser HWNDs and
+        // fire OnBeforeClose; MaybeFinishShutdown will then quit the loop.
+        if (window_ && window_->hwnd()) {
+            DestroyWindow(window_->hwnd());
+        }
         MaybeFinishShutdown();
         return;
     }
 
     closing_ = true;
+    PersistSession();
+    if (auto cookie_manager = CefCookieManager::GetGlobalManager(nullptr)) {
+        cookie_manager->FlushStore(nullptr);
+    }
+
     if (chrome_browser_) {
         chrome_browser_->GetHost()->CloseBrowser(false);
     }
@@ -173,7 +201,6 @@ void NebulaController::OnWindowCloseRequested() {
             tab.browser->GetHost()->CloseBrowser(false);
         }
     }
-    MaybeFinishShutdown();
 }
 
 void NebulaController::OnActiveTabChanged(const nebula::browser::NebulaTab& tab) {
@@ -292,10 +319,12 @@ void NebulaController::OnContentAddressChanged(CefRefPtr<CefBrowser> browser, co
                     nebula::ui::IsChromiumNewTabUrl(url)
                         ? nebula::ui::GetHomeUrl()
                         : nebula::ui::ToInternalUrl(url));
+    PersistSession();
 }
 
 void NebulaController::OnContentTitleChanged(CefRefPtr<CefBrowser> browser, const std::string& title) {
     tabs_.UpdateTitle(browser, title);
+    PersistSession();
     const auto* active_tab = tabs_.ActiveTab();
     if (window_ && active_tab && active_tab->browser && active_tab->browser->IsSame(browser)) {
         window_->SetTitle(Utf8ToWide(title.empty() ? "Nebula Browser" : title + " - Nebula"));
@@ -353,6 +382,7 @@ void NebulaController::CreateNewTab() {
     }
 
     tabs_.CreateTab(nebula::ui::GetHomeUrl());
+    PersistSession();
     CreateContentBrowser();
 }
 
@@ -366,6 +396,7 @@ void NebulaController::ActivateTab(int tab_id) {
     if (!tabs_.ActivateTab(tab_id)) {
         return;
     }
+    PersistSession();
 
     SetBrowserVisible(previous_browser, false);
     if (auto* active_tab = tabs_.ActiveTab()) {
@@ -385,12 +416,14 @@ void NebulaController::CloseTab(int tab_id) {
     }();
 
     CefRefPtr<CefBrowser> closing_browser = tabs_.CloseTab(tab_id);
+    PersistSession();
     if (closing_browser) {
         closing_browser->GetHost()->CloseBrowser(false);
     }
 
     if (!tabs_.ActiveTab()) {
         tabs_.CreateTab(nebula::ui::GetHomeUrl());
+        PersistSession();
         CreateContentBrowser();
         return;
     }
@@ -485,6 +518,7 @@ void NebulaController::ToggleDevTools() {
 
     CefWindowInfo window_info;
     window_info.SetAsPopup(window_->hwnd(), "Nebula Developer Tools");
+    window_info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
     CefBrowserSettings browser_settings;
     host->ShowDevTools(window_info, content_client_, browser_settings, CefPoint());
 }
@@ -578,6 +612,10 @@ void NebulaController::SendChromeState(const nebula::browser::NebulaTab& tab) {
         "});";
 
     chrome_browser_->GetMainFrame()->ExecuteJavaScript(script, nebula::ui::GetChromeUrl(), 0);
+}
+
+void NebulaController::PersistSession() const {
+    nebula::browser::SaveSessionState(tabs_.Tabs(), tabs_.ActiveTabIndex());
 }
 
 void NebulaController::MaybeFinishShutdown() {

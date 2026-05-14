@@ -9,9 +9,29 @@
 namespace nebula::app {
 namespace {
 
+constexpr wchar_t kMainInstanceMutexName[] = L"Local\\NebulaBrowserMainInstance";
+
 void EnableDpiAwareness() {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 }
+
+class ScopedHandle {
+public:
+    explicit ScopedHandle(HANDLE handle) : handle_(handle) {}
+    ~ScopedHandle() {
+        if (handle_) {
+            CloseHandle(handle_);
+        }
+    }
+
+    ScopedHandle(const ScopedHandle&) = delete;
+    ScopedHandle& operator=(const ScopedHandle&) = delete;
+
+    bool valid() const { return handle_ != nullptr; }
+
+private:
+    HANDLE handle_ = nullptr;
+};
 
 }  // namespace
 
@@ -26,8 +46,14 @@ int RunNebula(HINSTANCE instance, int show_command) {
         return subprocess_exit_code;
     }
 
+    ScopedHandle main_instance_mutex(CreateMutexW(nullptr, TRUE, kMainInstanceMutexName));
+    if (main_instance_mutex.valid() && GetLastError() == ERROR_ALREADY_EXISTS) {
+        return 0;
+    }
+
     CefSettings settings;
     settings.no_sandbox = true;
+    settings.persist_session_cookies = true;
 
     // A persistent profile is required for the GPU shader cache and several
     // hardware acceleration features. Without these Chromium silently falls
@@ -50,7 +76,7 @@ int RunNebula(HINSTANCE instance, int show_command) {
     command_line->InitFromString(GetCommandLineW());
 
     std::string initial_url = command_line->GetSwitchValue("url");
-    if (nebula::ui::IsEmptyOrChromiumNewTabUrl(initial_url)) {
+    if (!initial_url.empty() && nebula::ui::IsChromiumNewTabUrl(initial_url)) {
         initial_url = nebula::ui::GetHomeUrl();
     }
 

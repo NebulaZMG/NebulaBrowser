@@ -1,5 +1,7 @@
 #include "browser/tab_manager.h"
 
+#include <algorithm>
+
 #include "browser/url_utils.h"
 #include "ui/paths.h"
 
@@ -28,6 +30,28 @@ NebulaTab& TabManager::CreateTab(std::string url) {
     return tabs_.back();
 }
 
+void TabManager::RestoreTabs(const std::vector<PersistedTab>& tabs, size_t active_tab_index) {
+    tabs_.clear();
+    active_tab_id_ = 0;
+
+    for (const auto& restored_tab : tabs) {
+        NebulaTab tab;
+        tab.id = next_tab_id_++;
+        tab.url = restored_tab.url.empty() ? nebula::ui::GetHomeUrl() : restored_tab.url;
+        tab.title = restored_tab.title.empty() ? "New Tab" : restored_tab.title;
+        tabs_.push_back(std::move(tab));
+    }
+
+    if (tabs_.empty()) {
+        CreateInitialTab(nebula::ui::GetHomeUrl());
+        return;
+    }
+
+    active_tab_index = std::min(active_tab_index, tabs_.size() - 1);
+    active_tab_id_ = tabs_[active_tab_index].id;
+    Notify();
+}
+
 NebulaTab* TabManager::ActiveTab() {
     for (auto& tab : tabs_) {
         if (tab.id == active_tab_id_) {
@@ -48,6 +72,15 @@ const NebulaTab* TabManager::ActiveTab() const {
 
 const std::vector<NebulaTab>& TabManager::Tabs() const {
     return tabs_;
+}
+
+size_t TabManager::ActiveTabIndex() const {
+    for (size_t i = 0; i < tabs_.size(); ++i) {
+        if (tabs_[i].id == active_tab_id_) {
+            return i;
+        }
+    }
+    return 0;
 }
 
 bool TabManager::ActivateTab(int tab_id) {

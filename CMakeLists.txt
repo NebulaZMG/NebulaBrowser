@@ -41,6 +41,7 @@ set(NEBULA_SOURCES
     app/main.cpp
     src/app/nebula_controller.cpp
     src/app/run.cpp
+    src/browser/session_state.cpp
     src/browser/tab.cpp
     src/browser/tab_manager.cpp
     src/browser/url_utils.cpp

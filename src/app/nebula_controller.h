@@ -54,6 +54,7 @@ private:
     void SetContentFullscreen(bool fullscreen);
     void ResizeBrowsers();
     void SendChromeState(const nebula::browser::NebulaTab& tab);
+    void PersistSession() const;
     void MaybeFinishShutdown();
 
     HINSTANCE instance_ = nullptr;

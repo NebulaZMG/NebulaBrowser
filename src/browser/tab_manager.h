@@ -1,9 +1,11 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
 #include "browser/tab.h"
+#include "browser/session_state.h"
 
 namespace nebula::browser {
 
@@ -19,9 +21,11 @@ public:
 
     NebulaTab& CreateInitialTab(std::string initial_url);
     NebulaTab& CreateTab(std::string url);
+    void RestoreTabs(const std::vector<PersistedTab>& tabs, size_t active_tab_index);
     NebulaTab* ActiveTab();
     const NebulaTab* ActiveTab() const;
     const std::vector<NebulaTab>& Tabs() const;
+    size_t ActiveTabIndex() const;
 
     bool ActivateTab(int tab_id);
     CefRefPtr<CefBrowser> CloseTab(int tab_id);

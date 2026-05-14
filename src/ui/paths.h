@@ -8,6 +8,7 @@ namespace nebula::ui {
 std::filesystem::path GetExecutableDirectory();
 std::filesystem::path GetUserDataDirectory();
 std::filesystem::path GetCacheDirectory();
+std::filesystem::path GetSessionStatePath();
 std::filesystem::path GetUiPagePath(const std::wstring& page_name);
 std::string FilePathToUrl(std::filesystem::path path);
 std::string GetChromeUrl();
