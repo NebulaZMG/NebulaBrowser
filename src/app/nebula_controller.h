@@ -34,6 +34,7 @@ public:
     void OnContentLoadingStateChanged(CefRefPtr<CefBrowser> browser, bool is_loading) override;
     void OnContentLoadProgressChanged(CefRefPtr<CefBrowser> browser, double progress) override;
     void OnContentFaviconChanged(CefRefPtr<CefBrowser> browser, const std::vector<std::string>& urls) override;
+    void OnContentFullscreenChanged(CefRefPtr<CefBrowser> browser, bool fullscreen) override;
     void OnPopupRequested(CefRefPtr<CefBrowser> browser, const std::string& target_url) override;
     bool ShouldBypassInsecureWarning(CefRefPtr<CefBrowser> browser, const std::string& target_url) override;
 
@@ -50,6 +51,7 @@ private:
     void ToggleDevTools();
     void AdjustZoom(double delta);
     void FreshReload();
+    void SetContentFullscreen(bool fullscreen);
     void ResizeBrowsers();
     void SendChromeState(const nebula::browser::NebulaTab& tab);
     void MaybeFinishShutdown();
@@ -59,6 +61,7 @@ private:
     int show_command_ = SW_SHOWDEFAULT;
     bool closing_ = false;
     bool chrome_ready_ = false;
+    bool content_fullscreen_ = false;
 
     std::unique_ptr<nebula::window::NebulaWindow> window_;
     nebula::browser::TabManager tabs_;

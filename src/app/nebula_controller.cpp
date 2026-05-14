@@ -211,6 +211,12 @@ void NebulaController::OnBrowserClosing(nebula::cef::BrowserRole role, CefRefPtr
         menu_popup_browser_ = nullptr;
         menu_popup_client_ = nullptr;
     } else {
+        if (content_fullscreen_) {
+            const auto* active_tab = tabs_.ActiveTab();
+            if (active_tab && active_tab->browser && active_tab->browser->IsSame(browser)) {
+                SetContentFullscreen(false);
+            }
+        }
         tabs_.ClearBrowser(browser);
     }
     MaybeFinishShutdown();
@@ -306,6 +312,15 @@ void NebulaController::OnContentLoadProgressChanged(CefRefPtr<CefBrowser> browse
 
 void NebulaController::OnContentFaviconChanged(CefRefPtr<CefBrowser> browser, const std::vector<std::string>& urls) {
     tabs_.UpdateFavicon(browser, urls);
+}
+
+void NebulaController::OnContentFullscreenChanged(CefRefPtr<CefBrowser> browser, bool fullscreen) {
+    const auto* active_tab = tabs_.ActiveTab();
+    if (!active_tab || !active_tab->browser || !active_tab->browser->IsSame(browser)) {
+        return;
+    }
+
+    SetContentFullscreen(fullscreen);
 }
 
 void NebulaController::OnPopupRequested(CefRefPtr<CefBrowser> browser, const std::string& target_url) {
@@ -445,7 +460,7 @@ void NebulaController::CreateMenuPopupBrowser() {
 }
 
 void NebulaController::PositionMenuPopup() {
-    if (!window_ || !window_->hwnd() || !menu_popup_browser_) {
+    if (content_fullscreen_ || !window_ || !window_->hwnd() || !menu_popup_browser_) {
         return;
     }
 
@@ -493,19 +508,38 @@ void NebulaController::FreshReload() {
     tabs_.LoadURL(WithCacheBuster(tab->url));
 }
 
+void NebulaController::SetContentFullscreen(bool fullscreen) {
+    if (content_fullscreen_ == fullscreen) {
+        return;
+    }
+
+    content_fullscreen_ = fullscreen;
+    if (fullscreen) {
+        CloseMenuPopup();
+    }
+
+    SetBrowserVisible(chrome_browser_, !fullscreen);
+    if (window_) {
+        window_->SetFullscreen(fullscreen);
+    }
+    ResizeBrowsers();
+}
+
 void NebulaController::ResizeBrowsers() {
     if (!window_) {
         return;
     }
 
-    const auto layout = window_->CurrentLayout();
+    const auto layout = window_->CurrentLayout(!content_fullscreen_);
     if (chrome_browser_) {
         window_->ResizeChild(chrome_browser_->GetHost()->GetWindowHandle(), layout.chrome);
     }
     if (const auto* tab = tabs_.ActiveTab(); tab && tab->browser) {
         window_->ResizeChild(tab->browser->GetHost()->GetWindowHandle(), layout.content);
     }
-    PositionMenuPopup();
+    if (!content_fullscreen_) {
+        PositionMenuPopup();
+    }
 }
 
 void NebulaController::SendChromeState(const nebula::browser::NebulaTab& tab) {

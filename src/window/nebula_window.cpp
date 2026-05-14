@@ -23,6 +23,30 @@ RECT GetWorkArea() {
     return work_area;
 }
 
+RECT GetMonitorWorkArea(HWND hwnd) {
+    MONITORINFO monitor_info = {};
+    monitor_info.cbSize = sizeof(monitor_info);
+
+    const HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (monitor && GetMonitorInfoW(monitor, &monitor_info)) {
+        return monitor_info.rcWork;
+    }
+
+    return GetWorkArea();
+}
+
+RECT GetMonitorArea(HWND hwnd) {
+    MONITORINFO monitor_info = {};
+    monitor_info.cbSize = sizeof(monitor_info);
+
+    const HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (monitor && GetMonitorInfoW(monitor, &monitor_info)) {
+        return monitor_info.rcMonitor;
+    }
+
+    return GetWorkArea();
+}
+
 bool IsResizeHit(LRESULT hit) {
     return hit == HTLEFT || hit == HTRIGHT || hit == HTTOP || hit == HTBOTTOM ||
            hit == HTTOPLEFT || hit == HTTOPRIGHT || hit == HTBOTTOMLEFT || hit == HTBOTTOMRIGHT;
@@ -125,14 +149,16 @@ bool NebulaWindow::Create(HINSTANCE instance, int show_command) {
     return true;
 }
 
-BrowserLayout NebulaWindow::CurrentLayout() const {
+BrowserLayout NebulaWindow::CurrentLayout(bool show_chrome) const {
     RECT client = {};
     if (hwnd_) {
         GetClientRect(hwnd_, &client);
     }
 
     BrowserLayout layout;
-    layout.chrome = {0, 0, client.right, std::min<LONG>(ScaleForDpi(chrome_height_dip_), client.bottom)};
+    layout.chrome = show_chrome
+        ? RECT{0, 0, client.right, std::min<LONG>(ScaleForDpi(chrome_height_dip_), client.bottom)}
+        : RECT{0, 0, 0, 0};
     layout.content = {0, layout.chrome.bottom, client.right, client.bottom};
     return layout;
 }
@@ -160,11 +186,53 @@ void NebulaWindow::Minimize() {
 }
 
 void NebulaWindow::ToggleMaximize() {
-    if (!hwnd_) {
+    if (!hwnd_ || fullscreen_) {
         return;
     }
 
     ShowWindow(hwnd_, IsZoomed(hwnd_) ? SW_RESTORE : SW_MAXIMIZE);
+}
+
+void NebulaWindow::SetFullscreen(bool fullscreen) {
+    if (!hwnd_ || fullscreen_ == fullscreen) {
+        return;
+    }
+
+    if (fullscreen) {
+        restore_style_ = GetWindowLongPtrW(hwnd_, GWL_STYLE);
+        restore_ex_style_ = GetWindowLongPtrW(hwnd_, GWL_EXSTYLE);
+        restore_placement_.length = sizeof(restore_placement_);
+        GetWindowPlacement(hwnd_, &restore_placement_);
+
+        fullscreen_ = true;
+        const RECT monitor = GetMonitorArea(hwnd_);
+        SetWindowLongPtrW(hwnd_, GWL_STYLE, restore_style_ & ~(WS_THICKFRAME | WS_MAXIMIZEBOX | WS_MINIMIZEBOX));
+        SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, restore_ex_style_);
+        SetWindowPos(
+            hwnd_,
+            HWND_TOPMOST,
+            monitor.left,
+            monitor.top,
+            monitor.right - monitor.left,
+            monitor.bottom - monitor.top,
+            SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    } else {
+        fullscreen_ = false;
+        SetWindowLongPtrW(hwnd_, GWL_STYLE, restore_style_);
+        SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, restore_ex_style_);
+        SetWindowPlacement(hwnd_, &restore_placement_);
+        SetWindowPos(
+            hwnd_,
+            HWND_NOTOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        ApplyWindowFrameStyle(hwnd_);
+    }
+
+    NotifyResize();
 }
 
 void NebulaWindow::Close() {
@@ -335,6 +403,18 @@ LRESULT NebulaWindow::WndProc(UINT message, WPARAM wparam, LPARAM lparam) {
             return 0;
         }
 
+        case WM_GETMINMAXINFO: {
+            const RECT work_area = GetMonitorWorkArea(hwnd_);
+            const RECT monitor_area = GetMonitorArea(hwnd_);
+
+            auto* minmax = reinterpret_cast<MINMAXINFO*>(lparam);
+            minmax->ptMaxPosition.x = work_area.left - monitor_area.left;
+            minmax->ptMaxPosition.y = work_area.top - monitor_area.top;
+            minmax->ptMaxSize.x = work_area.right - work_area.left;
+            minmax->ptMaxSize.y = work_area.bottom - work_area.top;
+            return 0;
+        }
+
         case WM_CLOSE:
             if (delegate_) {
                 delegate_->OnWindowCloseRequested();
@@ -408,6 +488,10 @@ LRESULT NebulaWindow::HitTestPoint(POINT point) const {
 
     RECT window = {};
     GetWindowRect(hwnd_, &window);
+
+    if (fullscreen_ || IsZoomed(hwnd_)) {
+        return HTCLIENT;
+    }
 
     const int resize_border = ScaleForDpi(resize_border_dip_);
     const bool left = point.x >= window.left && point.x < window.left + resize_border;

@@ -30,6 +30,7 @@ public:
     virtual void OnContentLoadingStateChanged(CefRefPtr<CefBrowser> browser, bool is_loading) = 0;
     virtual void OnContentLoadProgressChanged(CefRefPtr<CefBrowser> browser, double progress) = 0;
     virtual void OnContentFaviconChanged(CefRefPtr<CefBrowser> browser, const std::vector<std::string>& urls) = 0;
+    virtual void OnContentFullscreenChanged(CefRefPtr<CefBrowser> browser, bool fullscreen) = 0;
     virtual void OnPopupRequested(CefRefPtr<CefBrowser> browser, const std::string& target_url) = 0;
     virtual bool ShouldBypassInsecureWarning(CefRefPtr<CefBrowser> browser, const std::string& target_url) = 0;
 };
@@ -63,6 +64,7 @@ public:
                        const CefString& title) override;
     void OnFaviconURLChange(CefRefPtr<CefBrowser> browser,
                             const std::vector<CefString>& icon_urls) override;
+    void OnFullscreenModeChange(CefRefPtr<CefBrowser> browser, bool fullscreen) override;
 
     bool OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
                        const CefKeyEvent& event,

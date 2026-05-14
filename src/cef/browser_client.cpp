@@ -89,6 +89,13 @@ void NebulaBrowserClient::OnFaviconURLChange(CefRefPtr<CefBrowser> browser,
     }
 }
 
+void NebulaBrowserClient::OnFullscreenModeChange(CefRefPtr<CefBrowser> browser, bool fullscreen) {
+    CEF_REQUIRE_UI_THREAD();
+    if (role_ == BrowserRole::Content && delegate_) {
+        delegate_->OnContentFullscreenChanged(browser, fullscreen);
+    }
+}
+
 bool NebulaBrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
                                         const CefKeyEvent& event,
                                         CefEventHandle os_event,
