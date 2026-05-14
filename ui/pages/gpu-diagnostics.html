@@ -3,462 +3,963 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPU Diagnostics - Nebula Browser</title>
+    <title>GPU Diagnostics</title>
     <style>
         :root {
-            color-scheme: dark;
-            --bg: #0b0d10;
-            --panel: #151922;
-            --panel-soft: #1d2330;
-            --text: #eef2ff;
-            --muted: #9aa7bd;
-            --good: #2fbf71;
-            --warn: #f4b740;
-            --bad: #ef5b5b;
-            --accent: #7b2eff;
-            --border: rgba(255, 255, 255, 0.12);
+            --bg:       #0c0c0c;
+            --bg2:      #111111;
+            --bg3:      #161616;
+            --border:   #2a2a2a;
+            --border2:  #333333;
+            --text:     #cccccc;
+            --dim:      #666666;
+            --ok:       #33cc55;
+            --warn:     #ddaa22;
+            --err:      #cc3333;
+            --accent:   #5588cc;
+            --head:     #aaaaaa;
         }
 
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        body {
-            margin: 0;
-            min-height: 100vh;
-            background:
-                radial-gradient(circle at top left, rgba(123, 46, 255, 0.26), transparent 32rem),
-                radial-gradient(circle at bottom right, rgba(0, 198, 255, 0.18), transparent 30rem),
-                var(--bg);
+        html, body {
+            height: 100%;
+            background: var(--bg);
             color: var(--text);
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-family: "Consolas", "Cascadia Code", "Lucida Console", "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.45;
         }
 
-        .container {
-            width: min(1100px, calc(100vw - 32px));
-            margin: 0 auto;
-            padding: 32px 0;
-        }
-
-        header {
+        /* ── title bar ── */
+        #titlebar {
             display: flex;
+            align-items: center;
             justify-content: space-between;
-            gap: 16px;
-            align-items: flex-start;
-            margin-bottom: 20px;
+            padding: 6px 12px;
+            background: var(--bg3);
+            border-bottom: 1px solid var(--border2);
+            user-select: none;
         }
 
-        h1, h2, h3, p { margin-top: 0; }
-
-        h1 {
-            margin-bottom: 8px;
-            font-size: clamp(2rem, 4vw, 3.4rem);
+        #titlebar .left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
-        .lede {
-            max-width: 720px;
-            color: var(--muted);
-            line-height: 1.6;
+        #titlebar h1 {
+            font-size: 12px;
+            font-weight: normal;
+            color: var(--head);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
         }
 
-        .grid {
+        #titlebar .sep { color: var(--border2); }
+
+        #run-ts {
+            font-size: 11px;
+            color: var(--dim);
+        }
+
+        #titlebar .right {
+            display: flex;
+            gap: 6px;
+        }
+
+        button {
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            color: var(--head);
+            font: inherit;
+            font-size: 11px;
+            padding: 3px 10px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        button:hover { background: var(--bg2); border-color: var(--accent); color: var(--accent); }
+        button:active { background: #1a2030; }
+
+        /* ── body layout ── */
+        #layout {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 16px;
+            grid-template-columns: 360px 1fr;
+            grid-template-rows: auto 1fr;
+            height: calc(100vh - 33px);
+            overflow: hidden;
         }
 
-        .card {
-            background: color-mix(in srgb, var(--panel) 88%, transparent);
-            border: 1px solid var(--border);
-            border-radius: 18px;
-            padding: 18px;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
+        /* ── left column: test panels ── */
+        #left-col {
+            grid-row: 1 / 3;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
         }
 
-        .status {
-            display: inline-flex;
+        /* ── right top: capability table ── */
+        #cap-panel {
+            overflow-y: auto;
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* ── right bottom: run log ── */
+        #log-panel {
+            overflow-y: auto;
+        }
+
+        /* ── panel structure ── */
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 10px;
+            background: var(--bg3);
+            border-bottom: 1px solid var(--border);
+            color: var(--head);
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            font-size: 11px;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .panel-header span { color: var(--dim); font-size: 10px; text-transform: none; letter-spacing: 0; }
+
+        .panel-body { padding: 8px 10px; }
+
+        /* ── test rows ── */
+        .test-block {
+            border-bottom: 1px solid var(--border);
+        }
+
+        .test-block:last-child { border-bottom: none; }
+
+        .test-header {
+            display: flex;
             align-items: center;
             gap: 8px;
-            margin-bottom: 12px;
             padding: 6px 10px;
-            border-radius: 999px;
-            background: var(--panel-soft);
-            color: var(--muted);
-            font-weight: 650;
+            background: var(--bg2);
+            border-bottom: 1px solid var(--border);
         }
 
-        .status::before {
-            content: "";
-            width: 9px;
-            height: 9px;
-            border-radius: 50%;
-            background: currentColor;
+        .test-name {
+            flex: 1;
+            font-weight: bold;
+            color: var(--head);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 11px;
         }
 
-        .good { color: var(--good); }
-        .warning { color: var(--warn); }
-        .error { color: var(--bad); }
+        .badge {
+            font-size: 10px;
+            font-weight: bold;
+            padding: 1px 6px;
+            border: 1px solid;
+            letter-spacing: 0.08em;
+        }
+
+        .badge-ok   { color: var(--ok);   border-color: var(--ok);   }
+        .badge-warn { color: var(--warn); border-color: var(--warn); }
+        .badge-err  { color: var(--err);  border-color: var(--err);  }
+        .badge-wait { color: var(--dim);  border-color: var(--dim);  }
+
+        .test-body {
+            padding: 6px 10px 8px;
+        }
 
         canvas {
             display: block;
             width: 100%;
-            height: auto;
-            margin: 12px 0;
+            height: 80px;
             border: 1px solid var(--border);
-            border-radius: 14px;
-            background: #03050a;
+            background: #080808;
+            margin-bottom: 6px;
         }
 
-        button {
-            border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
-            border-radius: 12px;
-            background: color-mix(in srgb, var(--accent) 26%, var(--panel));
-            color: var(--text);
-            cursor: pointer;
-            font: inherit;
-            font-weight: 650;
-            padding: 10px 14px;
-        }
-
-        button:hover {
-            filter: brightness(1.12);
-        }
-
-        dl {
+        .kv-grid {
             display: grid;
             grid-template-columns: minmax(130px, auto) 1fr;
-            gap: 8px 12px;
-            margin: 0;
+            gap: 2px 8px;
         }
 
-        dt {
-            color: var(--muted);
+        .kv-key {
+            color: var(--dim);
+            white-space: nowrap;
         }
 
-        dd {
-            margin: 0;
+        .kv-val {
+            color: var(--text);
             overflow-wrap: anywhere;
         }
 
-        pre {
-            max-height: 420px;
-            overflow: auto;
-            margin: 0;
-            padding: 14px;
-            border-radius: 14px;
-            background: #05070d;
-            color: #d6e2ff;
-            font-size: 12px;
-            line-height: 1.5;
-            white-space: pre-wrap;
+        .kv-val.ok   { color: var(--ok); }
+        .kv-val.warn { color: var(--warn); }
+        .kv-val.err  { color: var(--err); }
+
+        /* ── capability table ── */
+        .cap-table {
+            width: 100%;
+            border-collapse: collapse;
         }
+
+        .cap-table th {
+            text-align: left;
+            color: var(--dim);
+            font-weight: normal;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 3px 6px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg3);
+            position: sticky;
+            top: 37px;
+        }
+
+        .cap-table td {
+            padding: 2px 6px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+
+        .cap-table tr:last-child td { border-bottom: none; }
+
+        .cap-table .section-row td {
+            padding: 5px 6px 2px;
+            color: var(--accent);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            background: var(--bg2);
+            border-top: 1px solid var(--border);
+        }
+
+        .param-name { color: var(--dim); width: 220px; }
+        .param-val  { color: var(--text); word-break: break-all; }
+
+        /* ── extensions list ── */
+        .ext-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+            padding: 6px 10px 10px;
+        }
+
+        .ext-tag {
+            font-size: 10px;
+            padding: 1px 5px;
+            border: 1px solid var(--border2);
+            color: var(--dim);
+            background: var(--bg2);
+        }
+
+        .ext-tag.tier1 { border-color: #334455; color: #5588aa; }
+        .ext-tag.tier2 { border-color: var(--border2); color: #888; }
+
+        /* ── log ── */
+        #log-lines {
+            padding: 6px 10px;
+            font-size: 11px;
+            line-height: 1.6;
+        }
+
+        .log-line { display: flex; gap: 8px; }
+        .log-ts   { color: var(--dim); flex-shrink: 0; }
+        .log-ok   { color: var(--ok); }
+        .log-warn { color: var(--warn); }
+        .log-err  { color: var(--err); }
+        .log-info { color: var(--text); }
+        .log-dim  { color: var(--dim); }
+
+        /* ── scrollbars ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--border2); }
+        ::-webkit-scrollbar-thumb:hover { background: #444; }
+
+        /* ── copy flash ── */
+        @keyframes flash { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+        .flash { animation: flash 0.25s ease; }
     </style>
 </head>
 <body>
-    <main class="container">
-        <header>
-            <div>
-                <h1>GPU Diagnostics</h1>
-                <p class="lede">
-                    Quick CEF-compatible checks for WebGL, WebGL2, Canvas 2D, GPU renderer strings,
-                    and browser runtime details. Use this page to verify graphics support after GPU
-                    flag or runtime changes.
-                </p>
+
+<div id="titlebar">
+    <div class="left">
+        <h1>GPU Diagnostics</h1>
+        <span class="sep">/</span>
+        <span id="run-ts">not run</span>
+    </div>
+    <div class="right">
+        <button id="btn-copy">Copy Report</button>
+        <button id="btn-run">Run Tests</button>
+    </div>
+</div>
+
+<div id="layout">
+
+    <!-- ── LEFT: test panels ── -->
+    <div id="left-col">
+
+        <!-- Overall -->
+        <div class="test-block">
+            <div class="test-header">
+                <span class="test-name">Overall</span>
+                <span class="badge badge-wait" id="badge-overall">WAITING</span>
             </div>
-            <button id="refresh-button" type="button">Run Again</button>
-        </header>
+            <div class="test-body">
+                <div class="kv-grid" id="kv-overall"></div>
+            </div>
+        </div>
 
-        <section class="grid" aria-label="GPU test summary">
-            <article class="card">
-                <div id="overall-status" class="status">Waiting</div>
-                <h2>Summary</h2>
-                <dl id="summary-list"></dl>
-            </article>
+        <!-- WebGL 1 -->
+        <div class="test-block">
+            <div class="test-header">
+                <span class="test-name">WebGL 1</span>
+                <span class="badge badge-wait" id="badge-webgl">WAITING</span>
+            </div>
+            <div class="test-body">
+                <canvas id="webgl-canvas" width="480" height="160"></canvas>
+                <div class="kv-grid" id="kv-webgl"></div>
+            </div>
+        </div>
 
-            <article class="card">
-                <div id="webgl-status" class="status">Waiting</div>
-                <h2>WebGL</h2>
-                <canvas id="webgl-canvas" width="480" height="240"></canvas>
-                <p id="webgl-message"></p>
-            </article>
+        <!-- WebGL 2 -->
+        <div class="test-block">
+            <div class="test-header">
+                <span class="test-name">WebGL 2</span>
+                <span class="badge badge-wait" id="badge-webgl2">WAITING</span>
+            </div>
+            <div class="test-body">
+                <canvas id="webgl2-canvas" width="480" height="160"></canvas>
+                <div class="kv-grid" id="kv-webgl2"></div>
+            </div>
+        </div>
 
-            <article class="card">
-                <div id="webgl2-status" class="status">Waiting</div>
-                <h2>WebGL2</h2>
-                <canvas id="webgl2-canvas" width="480" height="240"></canvas>
-                <p id="webgl2-message"></p>
-            </article>
+        <!-- Canvas 2D -->
+        <div class="test-block">
+            <div class="test-header">
+                <span class="test-name">Canvas 2D</span>
+                <span class="badge badge-wait" id="badge-canvas2d">WAITING</span>
+            </div>
+            <div class="test-body">
+                <canvas id="canvas2d" width="480" height="160"></canvas>
+                <div class="kv-grid" id="kv-canvas2d"></div>
+            </div>
+        </div>
 
-            <article class="card">
-                <div id="canvas2d-status" class="status">Waiting</div>
-                <h2>Canvas 2D</h2>
-                <canvas id="canvas2d" width="480" height="240"></canvas>
-                <p id="canvas2d-message"></p>
-            </article>
-        </section>
+        <!-- WebGPU -->
+        <div class="test-block">
+            <div class="test-header">
+                <span class="test-name">WebGPU</span>
+                <span class="badge badge-wait" id="badge-webgpu">WAITING</span>
+            </div>
+            <div class="test-body">
+                <div class="kv-grid" id="kv-webgpu"></div>
+            </div>
+        </div>
 
-        <section class="card" style="margin-top: 16px;">
-            <h2>Detailed Information</h2>
-            <pre id="gpu-details">Waiting for diagnostics...</pre>
-        </section>
-    </main>
+        <!-- System -->
+        <div class="test-block">
+            <div class="test-header">
+                <span class="test-name">System</span>
+            </div>
+            <div class="test-body">
+                <div class="kv-grid" id="kv-system"></div>
+            </div>
+        </div>
 
-    <script>
-        function setStatus(id, level, text) {
-            const element = document.getElementById(id);
-            element.className = `status ${level}`;
-            element.textContent = text;
+    </div><!-- /left-col -->
+
+    <!-- ── RIGHT TOP: capability table ── -->
+    <div id="cap-panel">
+        <div class="panel-header">
+            GPU Capability Parameters
+            <span id="cap-count"></span>
+        </div>
+        <table class="cap-table" id="cap-table">
+            <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+            <tbody id="cap-body">
+                <tr><td colspan="2" style="padding:8px 6px;color:var(--dim)">Run tests to populate…</td></tr>
+            </tbody>
+        </table>
+        <div class="panel-header" style="margin-top:0;border-top:1px solid var(--border)">
+            Extensions
+            <span id="ext-count"></span>
+        </div>
+        <div class="ext-list" id="ext-list">
+            <span style="color:var(--dim)">Run tests to populate…</span>
+        </div>
+    </div>
+
+    <!-- ── RIGHT BOTTOM: run log ── -->
+    <div id="log-panel">
+        <div class="panel-header">Run Log</div>
+        <div id="log-lines"><span class="log-dim">Waiting for first run…</span></div>
+    </div>
+
+</div><!-- /layout -->
+
+<script>
+    /* ── helpers ── */
+    const $ = id => document.getElementById(id);
+
+    function fmt(v) {
+        if (v === undefined || v === null || v === '') return 'n/a';
+        if (Array.isArray(v)) return v.length ? v.join(', ') : 'n/a';
+        return String(v);
+    }
+
+    function setBadge(id, level, text) {
+        const el = $(id);
+        el.className = `badge badge-${level}`;
+        el.textContent = text;
+    }
+
+    function kvFill(containerId, rows) {
+        const el = $(containerId);
+        el.replaceChildren();
+        rows.forEach(([k, v, cls]) => {
+            const key = document.createElement('span');
+            key.className = 'kv-key';
+            key.textContent = k;
+            const val = document.createElement('span');
+            val.className = 'kv-val' + (cls ? ` ${cls}` : '');
+            val.textContent = fmt(v);
+            el.append(key, val);
+        });
+    }
+
+    /* ── log ── */
+    let logLines = [];
+    const t0 = { v: 0 };
+
+    function log(msg, cls = 'info') {
+        const elapsed = ((performance.now() - t0.v) / 1000).toFixed(3);
+        logLines.push({ ts: elapsed, msg, cls });
+        renderLog();
+    }
+
+    function renderLog() {
+        const el = $('log-lines');
+        el.replaceChildren();
+        logLines.forEach(({ ts, msg, cls }) => {
+            const line = document.createElement('div');
+            line.className = 'log-line';
+            const tsSpan = document.createElement('span');
+            tsSpan.className = 'log-ts';
+            tsSpan.textContent = `+${ts}s`;
+            const msgSpan = document.createElement('span');
+            msgSpan.className = `log-${cls}`;
+            msgSpan.textContent = msg;
+            line.append(tsSpan, msgSpan);
+            el.append(line);
+        });
+        el.scrollTop = el.scrollHeight;
+    }
+
+    /* ── WebGL helpers ── */
+    function createShader(gl, type, src) {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+            const msg = gl.getShaderInfoLog(s) || 'compile error';
+            gl.deleteShader(s);
+            throw new Error(msg);
         }
+        return s;
+    }
 
-        function setMessage(id, text) {
-            document.getElementById(id).textContent = text;
-        }
+    function getShaderPrecision(gl, shaderType, precType) {
+        try {
+            const f = gl.getShaderPrecisionFormat(shaderType, precType);
+            if (!f) return 'n/a';
+            return `range:[${f.rangeMin},${f.rangeMax}] precision:${f.precision}`;
+        } catch { return 'n/a'; }
+    }
 
-        function formatValue(value) {
-            if (value === undefined || value === null || value === '') return 'Unavailable';
-            if (Array.isArray(value)) return value.length ? value.join(', ') : 'Unavailable';
-            return String(value);
-        }
+    function glParam(gl, name) {
+        try {
+            const v = gl.getParameter(gl[name]);
+            if (v === null || v === undefined) return 'null';
+            if (v instanceof Float32Array || v instanceof Int32Array) return Array.from(v).join(', ');
+            return String(v);
+        } catch { return 'error'; }
+    }
 
-        function collectContextAttributes(gl) {
-            const attributes = gl.getContextAttributes?.();
-            if (!attributes) return {};
-            return {
-                alpha: attributes.alpha,
-                antialias: attributes.antialias,
-                depth: attributes.depth,
-                desynchronized: attributes.desynchronized,
-                failIfMajorPerformanceCaveat: attributes.failIfMajorPerformanceCaveat,
-                powerPreference: attributes.powerPreference,
-                premultipliedAlpha: attributes.premultipliedAlpha,
-                preserveDrawingBuffer: attributes.preserveDrawingBuffer,
-                stencil: attributes.stencil
-            };
-        }
+    function collectRendererInfo(gl) {
+        const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+        return {
+            version:   gl.getParameter(gl.VERSION),
+            glslVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+            vendor:    gl.getParameter(gl.VENDOR),
+            renderer:  gl.getParameter(gl.RENDERER),
+            unmaskedVendor:   dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL)   : null,
+            unmaskedRenderer: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : null,
+        };
+    }
 
-        function collectRendererInfo(gl) {
-            const info = {
-                version: gl.getParameter(gl.VERSION),
-                shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
-                vendor: gl.getParameter(gl.VENDOR),
-                renderer: gl.getParameter(gl.RENDERER),
-                maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
-                maxRenderbufferSize: gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),
-                maxViewportDims: Array.from(gl.getParameter(gl.MAX_VIEWPORT_DIMS)),
-                contextAttributes: collectContextAttributes(gl)
-            };
+    function collectCaps(gl, isGL2) {
+        const params = [
+            // Texture
+            ['_TEX', 'Textures'],
+            ['MAX_TEXTURE_SIZE',                    ''],
+            ['MAX_CUBE_MAP_TEXTURE_SIZE',            ''],
+            ['MAX_TEXTURE_IMAGE_UNITS',              ''],
+            ['MAX_VERTEX_TEXTURE_IMAGE_UNITS',       ''],
+            ['MAX_COMBINED_TEXTURE_IMAGE_UNITS',     ''],
 
-            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-            if (debugInfo) {
-                info.unmaskedVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
-                info.unmaskedRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+            // Geometry
+            ['_GEO', 'Geometry'],
+            ['MAX_VERTEX_ATTRIBS',                  ''],
+            ['MAX_VERTEX_UNIFORM_VECTORS',           ''],
+            ['MAX_VARYING_VECTORS',                  ''],
+            ['MAX_FRAGMENT_UNIFORM_VECTORS',         ''],
+            ['MAX_RENDERBUFFER_SIZE',                ''],
+            ['MAX_VIEWPORT_DIMS',                    ''],
+
+            // Framebuffer
+            ['_FB', 'Framebuffer'],
+            ['MAX_COLOR_ATTACHMENTS',               isGL2 ? '' : null],
+            ['MAX_DRAW_BUFFERS',                    isGL2 ? '' : null],
+            ['MAX_SAMPLES',                         isGL2 ? '' : null],
+
+            // Uniform buffers (GL2)
+            ['_UBO', 'Uniform Buffers'],
+            ['MAX_UNIFORM_BUFFER_BINDINGS',         isGL2 ? '' : null],
+            ['MAX_UNIFORM_BLOCK_SIZE',              isGL2 ? '' : null],
+            ['MAX_VERTEX_UNIFORM_BLOCKS',           isGL2 ? '' : null],
+            ['MAX_FRAGMENT_UNIFORM_BLOCKS',         isGL2 ? '' : null],
+            ['MAX_COMBINED_UNIFORM_BLOCKS',         isGL2 ? '' : null],
+
+            // Transform feedback (GL2)
+            ['_TF', 'Transform Feedback'],
+            ['MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS', isGL2 ? '' : null],
+            ['MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS', isGL2 ? '' : null],
+
+            // 3D / Array textures (GL2)
+            ['_3D', '3D & Array Textures'],
+            ['MAX_3D_TEXTURE_SIZE',                 isGL2 ? '' : null],
+            ['MAX_ARRAY_TEXTURE_LAYERS',            isGL2 ? '' : null],
+
+            // Aliasing
+            ['_ALIAS', 'Aliasing'],
+            ['ALIASED_LINE_WIDTH_RANGE',             ''],
+            ['ALIASED_POINT_SIZE_RANGE',             ''],
+        ];
+
+        const rows = [];
+        params.forEach(([name, label]) => {
+            if (name.startsWith('_')) {
+                rows.push({ section: label });
+                return;
             }
+            if (label === null) return; // skip if not available in this version
+            const val = gl[name] !== undefined ? glParam(gl, name) : 'n/a';
+            rows.push({ name, val });
+        });
 
-            return info;
-        }
+        return rows;
+    }
 
-        function createShader(gl, type, source) {
-            const shader = gl.createShader(type);
-            gl.shaderSource(shader, source);
-            gl.compileShader(shader);
-            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                const log = gl.getShaderInfoLog(shader) || 'Unknown shader compile error';
-                gl.deleteShader(shader);
-                throw new Error(log);
-            }
-            return shader;
-        }
+    function collectExtensions(gl) {
+        return (gl.getSupportedExtensions() || []).sort();
+    }
 
-        function drawWebGL(canvasId, version) {
-            const canvas = document.getElementById(canvasId);
-            const contextNames = version === 2
-                ? ['webgl2']
-                : ['webgl', 'experimental-webgl'];
-            const gl = contextNames.map(name => canvas.getContext(name)).find(Boolean);
-            if (!gl) {
-                return { ok: false, error: `WebGL${version === 2 ? '2' : ''} context unavailable` };
-            }
-
-            const vertexSource = version === 2
-                ? `#version 300 es
-                   in vec2 position;
-                   void main() {
-                     gl_Position = vec4(position, 0.0, 1.0);
-                   }`
-                : `attribute vec2 position;
-                   void main() {
-                     gl_Position = vec4(position, 0.0, 1.0);
-                   }`;
-
-            const fragmentSource = version === 2
-                ? `#version 300 es
-                   precision mediump float;
-                   out vec4 outColor;
-                   void main() {
-                     outColor = vec4(0.12, 0.85, 0.48, 1.0);
-                   }`
-                : `precision mediump float;
-                   void main() {
-                     gl_FragColor = vec4(0.12, 0.85, 0.48, 1.0);
-                   }`;
-
-            const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
-            const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-            const program = gl.createProgram();
-            gl.attachShader(program, vertexShader);
-            gl.attachShader(program, fragmentShader);
-            gl.linkProgram(program);
-
-            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-                throw new Error(gl.getProgramInfoLog(program) || 'Unknown WebGL link error');
-            }
-
-            const buffer = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-            gl.bufferData(
-                gl.ARRAY_BUFFER,
-                new Float32Array([-0.85, -0.75, 0.85, -0.75, 0.0, 0.85]),
-                gl.STATIC_DRAW);
-
-            const position = gl.getAttribLocation(program, 'position');
-            gl.viewport(0, 0, canvas.width, canvas.height);
-            gl.clearColor(0.03, 0.05, 0.1, 1.0);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            gl.useProgram(program);
-            gl.enableVertexAttribArray(position);
-            gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-            gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-            return {
-                ok: true,
-                renderer: collectRendererInfo(gl)
-            };
-        }
-
-        function testCanvas2D() {
-            const canvas = document.getElementById('canvas2d');
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-                return { ok: false, error: 'Canvas 2D context unavailable' };
-            }
-
-            const start = performance.now();
-            const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-            gradient.addColorStop(0, '#7b2eff');
-            gradient.addColorStop(0.55, '#00c6ff');
-            gradient.addColorStop(1, '#2fbf71');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            for (let i = 0; i < 900; i += 1) {
-                const x = (i * 29) % canvas.width;
-                const y = (i * 47) % canvas.height;
-                ctx.fillStyle = `rgba(${(i * 3) % 255}, ${(i * 7) % 255}, 255, 0.17)`;
-                ctx.beginPath();
-                ctx.arc(x, y, 10 + (i % 16), 0, Math.PI * 2);
-                ctx.fill();
-            }
-
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '600 26px system-ui, sans-serif';
-            ctx.fillText('Canvas 2D OK', 24, 54);
-
-            return {
-                ok: true,
-                drawTimeMs: Math.round((performance.now() - start) * 100) / 100
-            };
-        }
-
-        function renderSummary(info) {
-            const rows = [
-                ['WebGL', info.webgl.ok ? 'Available' : 'Unavailable'],
-                ['WebGL2', info.webgl2.ok ? 'Available' : 'Unavailable'],
-                ['Canvas 2D', info.canvas2d.ok ? `Working (${info.canvas2d.drawTimeMs} ms)` : 'Unavailable'],
-                ['Renderer', info.webgl.renderer?.unmaskedRenderer || info.webgl2.renderer?.unmaskedRenderer || info.webgl.renderer?.renderer],
-                ['Vendor', info.webgl.renderer?.unmaskedVendor || info.webgl2.renderer?.unmaskedVendor || info.webgl.renderer?.vendor],
-                ['User Agent', navigator.userAgent]
-            ];
-
-            const summaryList = document.getElementById('summary-list');
-            summaryList.replaceChildren();
-            rows.forEach(([label, value]) => {
-                const term = document.createElement('dt');
-                const description = document.createElement('dd');
-                term.textContent = label;
-                description.textContent = formatValue(value);
-                summaryList.append(term, description);
+    function collectPrecisions(gl) {
+        const types = [
+            [gl.VERTEX_SHADER,   'vert'],
+            [gl.FRAGMENT_SHADER, 'frag'],
+        ];
+        const precs = ['LOW_FLOAT','MEDIUM_FLOAT','HIGH_FLOAT','LOW_INT','MEDIUM_INT','HIGH_INT'];
+        const out = [];
+        types.forEach(([stype, label]) => {
+            precs.forEach(p => {
+                out.push([`${label} ${p.toLowerCase().replace('_', '.')}`, getShaderPrecision(gl, stype, gl[p])]);
             });
+        });
+        return out;
+    }
+
+    /* ── WebGL draw test ── */
+    function drawWebGL(canvasId, version) {
+        const canvas = $(canvasId);
+        const names = version === 2 ? ['webgl2'] : ['webgl', 'experimental-webgl'];
+        const gl = names.map(n => canvas.getContext(n)).find(Boolean);
+        if (!gl) return { ok: false, error: `WebGL${version === 2 ? '2' : ''} context unavailable` };
+
+        const vs = version === 2
+            ? `#version 300 es\nin vec2 p;\nvoid main(){gl_Position=vec4(p,0,1);}`
+            : `attribute vec2 p;\nvoid main(){gl_Position=vec4(p,0,1);}`;
+        const fs = version === 2
+            ? `#version 300 es\nprecision mediump float;\nout vec4 c;\nvoid main(){c=vec4(0.2,0.55,0.85,1.0);}`
+            : `precision mediump float;\nvoid main(){gl_FragColor=vec4(0.2,0.55,0.85,1.0);}`;
+
+        const vert = createShader(gl, gl.VERTEX_SHADER, vs);
+        const frag = createShader(gl, gl.FRAGMENT_SHADER, fs);
+        const prog = gl.createProgram();
+        gl.attachShader(prog, vert);
+        gl.attachShader(prog, frag);
+        gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+            throw new Error(gl.getProgramInfoLog(prog) || 'link error');
+
+        const buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-0.8,-0.7, 0.8,-0.7, 0.0,0.8]), gl.STATIC_DRAW);
+
+        const loc = gl.getAttribLocation(prog, 'p');
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.clearColor(0.05, 0.05, 0.05, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.useProgram(prog);
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.flush();
+
+        return {
+            ok: true,
+            renderer:   collectRendererInfo(gl),
+            caps:        collectCaps(gl, version === 2),
+            extensions:  collectExtensions(gl),
+            precisions:  collectPrecisions(gl),
+            contextAttrs: (() => {
+                const a = gl.getContextAttributes();
+                return a ? Object.entries(a).map(([k,v]) => [k, String(v)]) : [];
+            })(),
+        };
+    }
+
+    /* ── Canvas 2D test ── */
+    function testCanvas2D() {
+        const canvas = $('canvas2d');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return { ok: false, error: 'Canvas 2D context unavailable' };
+
+        const t = performance.now();
+        ctx.fillStyle = '#101010';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // grid lines
+        ctx.strokeStyle = '#222';
+        ctx.lineWidth = 1;
+        for (let x = 0; x < canvas.width; x += 20) {
+            ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke();
+        }
+        for (let y = 0; y < canvas.height; y += 20) {
+            ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke();
         }
 
-        function runDiagnostics() {
-            const info = {
-                generatedAt: new Date().toISOString(),
-                pageUrl: location.href,
-                browser: {
-                    userAgent: navigator.userAgent,
-                    platform: navigator.platform,
-                    language: navigator.language,
-                    hardwareConcurrency: navigator.hardwareConcurrency,
-                    deviceMemoryGb: navigator.deviceMemory,
-                    maxTouchPoints: navigator.maxTouchPoints,
-                    webdriver: navigator.webdriver
-                },
-                screen: {
-                    width: screen.width,
-                    height: screen.height,
-                    availWidth: screen.availWidth,
-                    availHeight: screen.availHeight,
-                    colorDepth: screen.colorDepth,
-                    pixelDepth: screen.pixelDepth,
-                    devicePixelRatio: window.devicePixelRatio
-                },
-                webgl: {},
-                webgl2: {},
-                canvas2d: {}
+        // 900 blobs stress test
+        for (let i = 0; i < 900; i++) {
+            const x = (i * 29) % canvas.width;
+            const y = (i * 47) % canvas.height;
+            ctx.fillStyle = `rgba(${(i*3)%255},${(i*7)%255},200,0.12)`;
+            ctx.beginPath();
+            ctx.arc(x, y, 4 + (i % 8), 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // diagonal bar
+        ctx.fillStyle = 'rgba(85,136,204,0.55)';
+        ctx.beginPath();
+        ctx.moveTo(0,0); ctx.lineTo(canvas.width,0);
+        ctx.lineTo(canvas.width - 40, canvas.height);
+        ctx.lineTo(-40, canvas.height);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#cccccc';
+        ctx.font = 'bold 11px Consolas, monospace';
+        ctx.fillText('CANVAS 2D OK', 8, 18);
+
+        const drawTime = Math.round((performance.now() - t) * 100) / 100;
+        return {
+            ok: true,
+            drawTimeMs: drawTime,
+            ops: 900,
+            compositing: ctx.globalCompositeOperation,
+            smoothingEnabled: ctx.imageSmoothingEnabled,
+        };
+    }
+
+    /* ── WebGPU probe ── */
+    async function probeWebGPU() {
+        if (!navigator.gpu) return { ok: false, reason: 'navigator.gpu unavailable' };
+        try {
+            const adapter = await navigator.gpu.requestAdapter();
+            if (!adapter) return { ok: false, reason: 'No adapter returned' };
+            const info = adapter.info || {};
+            return {
+                ok: true,
+                vendor:       info.vendor      || 'n/a',
+                architecture: info.architecture || 'n/a',
+                device:       info.device       || 'n/a',
+                description:  info.description  || 'n/a',
             };
+        } catch (e) {
+            return { ok: false, reason: e.message };
+        }
+    }
 
-            try {
-                info.webgl = drawWebGL('webgl-canvas', 1);
-                setStatus('webgl-status', info.webgl.ok ? 'good' : 'error', info.webgl.ok ? 'Available' : 'Unavailable');
-                setMessage('webgl-message', info.webgl.ok
-                    ? formatValue(info.webgl.renderer.unmaskedRenderer || info.webgl.renderer.renderer)
-                    : info.webgl.error);
-            } catch (error) {
-                info.webgl = { ok: false, error: error.message };
-                setStatus('webgl-status', 'error', 'Failed');
-                setMessage('webgl-message', error.message);
+    /* ── capability table renderer ── */
+    function renderCapTable(capRows, extensions) {
+        const tbody = $('cap-body');
+        tbody.replaceChildren();
+
+        capRows.forEach(row => {
+            const tr = document.createElement('tr');
+            if (row.section !== undefined) {
+                tr.className = 'section-row';
+                const td = document.createElement('td');
+                td.colSpan = 2;
+                td.textContent = row.section;
+                tr.append(td);
+            } else {
+                const tdName = document.createElement('td');
+                tdName.className = 'param-name';
+                tdName.textContent = row.name;
+                const tdVal = document.createElement('td');
+                tdVal.className = 'param-val';
+                tdVal.textContent = row.val;
+                tr.append(tdName, tdVal);
             }
+            tbody.append(tr);
+        });
 
-            try {
-                info.webgl2 = drawWebGL('webgl2-canvas', 2);
-                setStatus('webgl2-status', info.webgl2.ok ? 'good' : 'warning', info.webgl2.ok ? 'Available' : 'Unavailable');
-                setMessage('webgl2-message', info.webgl2.ok
-                    ? formatValue(info.webgl2.renderer.unmaskedRenderer || info.webgl2.renderer.renderer)
-                    : info.webgl2.error);
-            } catch (error) {
-                info.webgl2 = { ok: false, error: error.message };
-                setStatus('webgl2-status', 'warning', 'Failed');
-                setMessage('webgl2-message', error.message);
+        $('cap-count').textContent = `${capRows.filter(r => !r.section).length} params`;
+
+        // Extensions
+        const extEl = $('ext-list');
+        extEl.replaceChildren();
+        $('ext-count').textContent = `${extensions.length} extensions`;
+
+        const tier1 = new Set([
+            'WEBGL_debug_renderer_info','OES_texture_float','OES_texture_half_float',
+            'WEBGL_lose_context','OES_vertex_array_object','ANGLE_instanced_arrays',
+            'EXT_color_buffer_float','EXT_texture_filter_anisotropic',
+            'OES_element_index_uint','WEBGL_depth_texture','WEBGL_draw_buffers',
+            'EXT_disjoint_timer_query','EXT_disjoint_timer_query_webgl2',
+            'KHR_parallel_shader_compile',
+        ]);
+
+        extensions.forEach(ext => {
+            const tag = document.createElement('span');
+            tag.className = 'ext-tag ' + (tier1.has(ext) ? 'tier1' : 'tier2');
+            tag.textContent = ext;
+            extEl.append(tag);
+        });
+    }
+
+    /* ── full report ── */
+    let reportData = null;
+
+    /* ── run ── */
+    async function runDiagnostics() {
+        logLines = [];
+        t0.v = performance.now();
+        $('run-ts').textContent = new Date().toISOString().replace('T', ' ').replace('Z', ' UTC');
+        log('Starting GPU diagnostic run…', 'info');
+
+        // Reset badges
+        ['overall','webgl','webgl2','canvas2d','webgpu'].forEach(id => setBadge(`badge-${id}`, 'wait', 'RUNNING'));
+
+        const report = { ts: new Date().toISOString(), webgl: {}, webgl2: {}, canvas2d: {}, webgpu: {}, system: {} };
+
+        /* system */
+        report.system = {
+            userAgent:           navigator.userAgent,
+            platform:            navigator.platform,
+            language:            navigator.language,
+            hardwareConcurrency: navigator.hardwareConcurrency,
+            deviceMemoryGb:      navigator.deviceMemory ?? 'n/a',
+            maxTouchPoints:      navigator.maxTouchPoints,
+            webdriver:           navigator.webdriver,
+            screenWidth:         screen.width,
+            screenHeight:        screen.height,
+            colorDepth:          screen.colorDepth,
+            devicePixelRatio:    window.devicePixelRatio,
+        };
+
+        kvFill('kv-system', [
+            ['User Agent',    report.system.userAgent],
+            ['Platform',      report.system.platform],
+            ['Language',      report.system.language],
+            ['CPU Threads',   report.system.hardwareConcurrency],
+            ['Device RAM',    report.system.deviceMemoryGb !== 'n/a' ? `${report.system.deviceMemoryGb} GB` : 'n/a'],
+            ['Screen',        `${report.system.screenWidth}×${report.system.screenHeight} @ ${report.system.devicePixelRatio}x`],
+            ['Color Depth',   `${report.system.colorDepth}-bit`],
+            ['Webdriver',     String(report.system.webdriver)],
+        ]);
+
+        /* webgl 1 */
+        log('[WebGL1] Initialising context…', 'dim');
+        try {
+            const t1 = performance.now();
+            report.webgl = drawWebGL('webgl-canvas', 1);
+            const elapsed = ((performance.now() - t1) / 1).toFixed(1);
+            if (report.webgl.ok) {
+                log(`[WebGL1] OK — ${report.webgl.renderer.unmaskedRenderer || report.webgl.renderer.renderer} (${elapsed} ms)`, 'ok');
+                setBadge('badge-webgl', 'ok', 'OK');
+                kvFill('kv-webgl', [
+                    ['Status',         'Available',                 'ok'],
+                    ['Renderer',       report.webgl.renderer.unmaskedRenderer || report.webgl.renderer.renderer],
+                    ['Vendor',         report.webgl.renderer.unmaskedVendor   || report.webgl.renderer.vendor],
+                    ['Version',        report.webgl.renderer.version],
+                    ['GLSL',           report.webgl.renderer.glslVersion],
+                    ['Extensions',     `${report.webgl.extensions.length} supported`],
+                    ['Init time',      `${elapsed} ms`],
+                ]);
+            } else {
+                log(`[WebGL1] FAIL — ${report.webgl.error}`, 'err');
+                setBadge('badge-webgl', 'err', 'FAIL');
+                kvFill('kv-webgl', [['Status', 'Unavailable', 'err'], ['Error', report.webgl.error]]);
             }
-
-            try {
-                info.canvas2d = testCanvas2D();
-                setStatus('canvas2d-status', info.canvas2d.ok ? 'good' : 'error', info.canvas2d.ok ? 'Working' : 'Unavailable');
-                setMessage('canvas2d-message', info.canvas2d.ok
-                    ? `Draw stress test completed in ${info.canvas2d.drawTimeMs} ms.`
-                    : info.canvas2d.error);
-            } catch (error) {
-                info.canvas2d = { ok: false, error: error.message };
-                setStatus('canvas2d-status', 'error', 'Failed');
-                setMessage('canvas2d-message', error.message);
-            }
-
-            const healthy = info.webgl.ok && info.canvas2d.ok;
-            setStatus('overall-status', healthy ? 'good' : 'warning', healthy ? 'GPU Path Looks Good' : 'GPU Path Limited');
-            renderSummary(info);
-            document.getElementById('gpu-details').textContent = JSON.stringify(info, null, 2);
+        } catch (e) {
+            report.webgl = { ok: false, error: e.message };
+            log(`[WebGL1] ERROR — ${e.message}`, 'err');
+            setBadge('badge-webgl', 'err', 'ERROR');
+            kvFill('kv-webgl', [['Status', 'Error', 'err'], ['Error', e.message]]);
         }
 
-        document.getElementById('refresh-button').addEventListener('click', runDiagnostics);
-        window.addEventListener('DOMContentLoaded', runDiagnostics);
-    </script>
+        /* webgl 2 */
+        log('[WebGL2] Initialising context…', 'dim');
+        try {
+            const t1 = performance.now();
+            report.webgl2 = drawWebGL('webgl2-canvas', 2);
+            const elapsed = ((performance.now() - t1) / 1).toFixed(1);
+            if (report.webgl2.ok) {
+                log(`[WebGL2] OK — ${report.webgl2.renderer.unmaskedRenderer || report.webgl2.renderer.renderer} (${elapsed} ms)`, 'ok');
+                setBadge('badge-webgl2', 'ok', 'OK');
+                kvFill('kv-webgl2', [
+                    ['Status',         'Available',                 'ok'],
+                    ['Renderer',       report.webgl2.renderer.unmaskedRenderer || report.webgl2.renderer.renderer],
+                    ['Vendor',         report.webgl2.renderer.unmaskedVendor   || report.webgl2.renderer.vendor],
+                    ['Version',        report.webgl2.renderer.version],
+                    ['GLSL',           report.webgl2.renderer.glslVersion],
+                    ['Extensions',     `${report.webgl2.extensions.length} supported`],
+                    ['Init time',      `${elapsed} ms`],
+                ]);
+            } else {
+                log(`[WebGL2] UNAVAIL — ${report.webgl2.error}`, 'warn');
+                setBadge('badge-webgl2', 'warn', 'N/A');
+                kvFill('kv-webgl2', [['Status', 'Unavailable', 'warn'], ['Reason', report.webgl2.error]]);
+            }
+        } catch (e) {
+            report.webgl2 = { ok: false, error: e.message };
+            log(`[WebGL2] ERROR — ${e.message}`, 'err');
+            setBadge('badge-webgl2', 'err', 'ERROR');
+            kvFill('kv-webgl2', [['Status', 'Error', 'err'], ['Error', e.message]]);
+        }
+
+        /* canvas 2d */
+        log('[Canvas2D] Running draw stress test (900 ops)…', 'dim');
+        try {
+            const t1 = performance.now();
+            report.canvas2d = testCanvas2D();
+            const elapsed = ((performance.now() - t1) / 1).toFixed(1);
+            if (report.canvas2d.ok) {
+                log(`[Canvas2D] OK — ${report.canvas2d.drawTimeMs} ms draw time`, 'ok');
+                setBadge('badge-canvas2d', 'ok', 'OK');
+                kvFill('kv-canvas2d', [
+                    ['Status',       'Working',                   'ok'],
+                    ['Draw time',    `${report.canvas2d.drawTimeMs} ms`],
+                    ['Ops',          `${report.canvas2d.ops} arcs`],
+                    ['Compositing',  report.canvas2d.compositing],
+                    ['Smoothing',    String(report.canvas2d.smoothingEnabled)],
+                ]);
+            } else {
+                log(`[Canvas2D] FAIL — ${report.canvas2d.error}`, 'err');
+                setBadge('badge-canvas2d', 'err', 'FAIL');
+                kvFill('kv-canvas2d', [['Status', 'Unavailable', 'err'], ['Error', report.canvas2d.error]]);
+            }
+        } catch (e) {
+            report.canvas2d = { ok: false, error: e.message };
+            log(`[Canvas2D] ERROR — ${e.message}`, 'err');
+            setBadge('badge-canvas2d', 'err', 'ERROR');
+            kvFill('kv-canvas2d', [['Status', 'Error', 'err'], ['Error', e.message]]);
+        }
+
+        /* webgpu */
+        log('[WebGPU] Probing adapter…', 'dim');
+        report.webgpu = await probeWebGPU();
+        if (report.webgpu.ok) {
+            log(`[WebGPU] Adapter found — ${report.webgpu.vendor} / ${report.webgpu.architecture}`, 'ok');
+            setBadge('badge-webgpu', 'ok', 'OK');
+            kvFill('kv-webgpu', [
+                ['Status',       'Available',              'ok'],
+                ['Vendor',       report.webgpu.vendor],
+                ['Architecture', report.webgpu.architecture],
+                ['Device',       report.webgpu.device],
+                ['Description',  report.webgpu.description],
+            ]);
+        } else {
+            log(`[WebGPU] UNAVAIL — ${report.webgpu.reason}`, 'warn');
+            setBadge('badge-webgpu', 'warn', 'N/A');
+            kvFill('kv-webgpu', [['Status', 'Unavailable', 'warn'], ['Reason', report.webgpu.reason]]);
+        }
+
+        /* capability table — prefer WebGL2, fall back to WebGL1 */
+        const glForCaps  = report.webgl2.ok  ? report.webgl2  : report.webgl.ok ? report.webgl : null;
+        const extensions = glForCaps ? glForCaps.extensions : [];
+        if (glForCaps) {
+            const capRows = [...glForCaps.caps];
+
+            // Shader precision section
+            capRows.push({ section: 'Shader Precision' });
+            glForCaps.precisions.forEach(([k, v]) => capRows.push({ name: k, val: v }));
+
+            // Context attributes
+            capRows.push({ section: 'Context Attributes' });
+            glForCaps.contextAttrs.forEach(([k, v]) => capRows.push({ name: k, val: v }));
+
+            renderCapTable(capRows, extensions);
+        }
+
+        /* overall */
+        const healthy = report.webgl.ok && report.canvas2d.ok;
+        const gl2ok   = report.webgl2.ok;
+        const overallLevel = healthy ? 'ok' : 'err';
+        const overallText  = healthy ? 'PASS' : 'DEGRADED';
+        setBadge('badge-overall', overallLevel, overallText);
+
+        kvFill('kv-overall', [
+            ['Status',    healthy ? 'All critical tests passed' : 'One or more critical tests failed', healthy ? 'ok' : 'err'],
+            ['WebGL 1',   report.webgl.ok   ? 'OK'  : 'FAIL',    report.webgl.ok   ? 'ok' : 'err'],
+            ['WebGL 2',   gl2ok             ? 'OK'  : 'N/A',     gl2ok             ? 'ok' : 'warn'],
+            ['Canvas 2D', report.canvas2d.ok ? 'OK' : 'FAIL',    report.canvas2d.ok ? 'ok' : 'err'],
+            ['WebGPU',    report.webgpu.ok   ? 'OK' : 'N/A',     report.webgpu.ok   ? 'ok' : 'warn'],
+        ]);
+
+        const totalMs = (performance.now() - t0.v).toFixed(1);
+        log(`Run complete in ${totalMs} ms`, healthy ? 'ok' : 'warn');
+
+        reportData = report;
+    }
+
+    /* ── copy report ── */
+    $('btn-copy').addEventListener('click', () => {
+        if (!reportData) return;
+        navigator.clipboard.writeText(JSON.stringify(reportData, null, 2)).then(() => {
+            const btn = $('btn-copy');
+            btn.textContent = 'Copied!';
+            btn.classList.add('flash');
+            setTimeout(() => { btn.textContent = 'Copy Report'; btn.classList.remove('flash'); }, 1200);
+        });
+    });
+
+    $('btn-run').addEventListener('click', runDiagnostics);
+    window.addEventListener('DOMContentLoaded', runDiagnostics);
+</script>
 </body>
 </html>
