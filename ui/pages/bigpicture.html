@@ -26,6 +26,10 @@
       <div class="bg-particles"></div>
       <div class="bg-glow"></div>
     </div>
+    <div id="browser-stage-frame" class="browser-stage-frame hidden" aria-hidden="true"></div>
+    <div id="virtual-cursor" class="virtual-cursor hidden" aria-hidden="true">
+      <div class="virtual-cursor-dot"></div>
+    </div>
 
     <!-- Top header bar -->
     <header class="bp-header">
@@ -41,6 +45,9 @@
       </div>
       <div class="header-right">
         <div class="status-icons">
+          <span id="bp-controller-status" class="status-icon controller-status disconnected" title="Controller disconnected">
+            <span class="material-symbols-outlined">sports_esports</span>
+          </span>
           <span id="bp-wifi" class="status-icon" title="Connected">
             <span class="material-symbols-outlined">wifi</span>
           </span>
@@ -71,6 +78,10 @@
           <button class="nav-item" data-section="bookmarks" data-focusable tabindex="0">
             <span class="material-symbols-outlined">bookmarks</span>
             <span class="nav-label">Bookmarks</span>
+          </button>
+          <button class="nav-item" data-section="history" data-focusable tabindex="0">
+            <span class="material-symbols-outlined">history</span>
+            <span class="nav-label">History</span>
           </button>
           <button class="nav-item" data-section="downloads" data-focusable tabindex="0">
             <span class="material-symbols-outlined">download</span>
@@ -144,6 +155,26 @@
           </div>
           <div class="tile-grid large" id="bookmarksGrid">
             <!-- Bookmarks will be populated dynamically -->
+          </div>
+        </section>
+
+        <!-- History section -->
+        <section id="section-history" class="bp-section">
+          <div class="section-header">
+            <h1 class="section-title">History</h1>
+            <p class="section-subtitle">Recently visited sites from this profile</p>
+          </div>
+          <div class="section-actions">
+            <button class="action-btn danger" id="bp-clear-history" data-focusable tabindex="0">
+              <span class="material-symbols-outlined">delete</span>
+              <span>Clear History</span>
+            </button>
+          </div>
+          <div class="list-container" id="historyList">
+            <div class="empty-state">
+              <span class="material-symbols-outlined">history</span>
+              <p>No browsing history</p>
+            </div>
           </div>
         </section>
 
@@ -332,7 +363,7 @@
                   </div>
                 </div>
                 <div class="option-control">
-                  <button class="action-button" id="bp-clear-history" data-focusable tabindex="0">
+                  <button class="action-button" id="bp-clear-history-settings" data-focusable tabindex="0">
                     <span class="material-symbols-outlined">delete</span>
                     <span>Clear</span>
                   </button>
@@ -403,28 +434,28 @@
 
     <!-- Bottom controller hints -->
     <footer class="bp-footer">
-      <div class="controller-hints">
+      <div class="controller-hints" id="controller-hints">
         <div class="hint">
           <span class="controller-btn dpad">
             <span class="material-symbols-outlined">gamepad</span>
           </span>
-          <span>Navigate</span>
+          <span id="hint-navigate">Navigate</span>
         </div>
         <div class="hint">
           <span class="controller-btn a-btn">A</span>
-          <span>Select</span>
+          <span id="hint-a">Select</span>
         </div>
         <div class="hint">
           <span class="controller-btn b-btn">B</span>
-          <span>Back</span>
+          <span id="hint-b">Back</span>
         </div>
         <div class="hint">
           <span class="controller-btn y-btn">Y</span>
-          <span>Search</span>
+          <span id="hint-y">Search</span>
         </div>
         <div class="hint">
           <span class="controller-btn menu-btn">☰</span>
-          <span>Menu</span>
+          <span id="hint-menu">Menu</span>
         </div>
       </div>
     </footer>

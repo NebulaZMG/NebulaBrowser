@@ -9,7 +9,7 @@
 
 namespace nebula::app {
 
-int RunNebula(const nebula::platform::AppStartup& startup) {
+int RunNebula(const nebula::platform::AppStartup& startup, LaunchOptions options) {
     nebula::platform::PrepareApp();
 
     const CefMainArgs main_args = nebula::platform::MakeMainArgs(startup);
@@ -41,7 +41,7 @@ int RunNebula(const nebula::platform::AppStartup& startup) {
         initial_url = nebula::ui::GetHomeUrl();
     }
 
-    NebulaController controller(startup, std::move(initial_url));
+    NebulaController controller(startup, std::move(initial_url), options);
     const bool created = controller.Create();
     if (created) {
         CefRunMessageLoop();

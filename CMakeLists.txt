@@ -35,7 +35,6 @@ SET_CEF_TARGET_OUT_DIR()
 # ------------------------------------------------------------
 
 set(NEBULA_COMMON_SOURCES
-    app/main.cpp
     src/app/nebula_controller.cpp
     src/app/run.cpp
     src/browser/session_state.cpp
@@ -54,20 +53,12 @@ if(OS_WINDOWS)
         src/platform/win/browser_host_win.cpp
         src/platform/win/nebula_window_win.cpp
     )
-    add_executable(NebulaBrowser WIN32
-        ${NEBULA_COMMON_SOURCES}
-        ${NEBULA_PLATFORM_SOURCES}
-    )
 elseif(OS_MACOSX)
     set(NEBULA_PLATFORM_SOURCES
         src/platform/mac/paths_mac.cpp
         src/platform/mac/startup_mac.cpp
         src/platform/mac/browser_host_mac.cpp
         src/platform/mac/nebula_window_mac.cpp
-    )
-    add_executable(NebulaBrowser MACOSX_BUNDLE
-        ${NEBULA_COMMON_SOURCES}
-        ${NEBULA_PLATFORM_SOURCES}
     )
 elseif(OS_LINUX)
     set(NEBULA_PLATFORM_SOURCES
@@ -76,86 +67,111 @@ elseif(OS_LINUX)
         src/platform/linux/browser_host_linux.cpp
         src/platform/linux/nebula_window_linux.cpp
     )
-    add_executable(NebulaBrowser
-        ${NEBULA_COMMON_SOURCES}
-        ${NEBULA_PLATFORM_SOURCES}
-    )
 else()
     message(FATAL_ERROR "Unsupported platform.")
 endif()
 
-SET_EXECUTABLE_TARGET_PROPERTIES(NebulaBrowser)
-add_dependencies(NebulaBrowser libcef_dll_wrapper)
-
-target_include_directories(NebulaBrowser PRIVATE
-    "${CMAKE_SOURCE_DIR}/src"
-    "${CEF_ROOT}"
-    "${CEF_ROOT}/include"
-)
-
 ADD_LOGICAL_TARGET("libcef_lib" "${CEF_LIB_RELEASE}" "${CEF_LIB_DEBUG}")
-target_link_libraries(NebulaBrowser PRIVATE
-    libcef_lib
-    libcef_dll_wrapper
-    ${CEF_STANDARD_LIBS}
-)
 
-if(MSVC)
-    set_property(TARGET NebulaBrowser PROPERTY
-        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
-    )
-endif()
-
-# ------------------------------------------------------------
-# Platform-specific CEF runtime deployment
-# ------------------------------------------------------------
-
-if(OS_WINDOWS)
-    target_link_libraries(NebulaBrowser PRIVATE dwmapi)
-    target_compile_definitions(NebulaBrowser PRIVATE
-        NOMINMAX
-        WIN32_LEAN_AND_MEAN
-    )
-    COPY_FILES("NebulaBrowser" "${CEF_BINARY_FILES}" "${CEF_BINARY_DIR_RELEASE}" "${CEF_TARGET_OUT_DIR}")
-    COPY_FILES("NebulaBrowser" "${CEF_RESOURCE_FILES}" "${CEF_RESOURCE_DIR}" "${CEF_TARGET_OUT_DIR}")
-elseif(OS_LINUX)
+if(OS_LINUX)
     FIND_LINUX_LIBRARIES("X11")
-    COPY_FILES("NebulaBrowser" "${CEF_BINARY_FILES}" "${CEF_BINARY_DIR_RELEASE}" "${CEF_TARGET_OUT_DIR}")
-    COPY_FILES("NebulaBrowser" "${CEF_RESOURCE_FILES}" "${CEF_RESOURCE_DIR}" "${CEF_TARGET_OUT_DIR}")
-elseif(OS_MACOSX)
-    set(NEBULA_APP "${CEF_TARGET_OUT_DIR}/NebulaBrowser.app")
-    COPY_MAC_FRAMEWORK(
-        "NebulaBrowser"
-        "Chromium Embedded Framework"
-        "${CEF_BINARY_DIR_RELEASE}"
-        "${NEBULA_APP}/Contents/Frameworks"
-    )
-    COPY_FILES(
-        "NebulaBrowser"
-        "${CEF_BINARY_FILES}"
-        "${CEF_BINARY_DIR_RELEASE}"
-        "${NEBULA_APP}/Contents/Frameworks"
-    )
-    COPY_FILES(
-        "NebulaBrowser"
-        "${CEF_RESOURCE_FILES}"
-        "${CEF_RESOURCE_DIR}"
-        "${NEBULA_APP}/Contents/Resources"
-    )
 endif()
 
-# ------------------------------------------------------------
-# Copy Nebula UI files after build
-# ------------------------------------------------------------
+function(add_nebula_app_target nebula_target entry_source)
+    if(OS_WINDOWS)
+        add_executable(${nebula_target} WIN32
+            ${entry_source}
+            ${NEBULA_COMMON_SOURCES}
+            ${NEBULA_PLATFORM_SOURCES}
+        )
+    elseif(OS_MACOSX)
+        add_executable(${nebula_target} MACOSX_BUNDLE
+            ${entry_source}
+            ${NEBULA_COMMON_SOURCES}
+            ${NEBULA_PLATFORM_SOURCES}
+        )
+    elseif(OS_LINUX)
+        add_executable(${nebula_target}
+            ${entry_source}
+            ${NEBULA_COMMON_SOURCES}
+            ${NEBULA_PLATFORM_SOURCES}
+        )
+    endif()
 
-add_custom_command(TARGET NebulaBrowser POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/ui"
-        "$<TARGET_FILE_DIR:NebulaBrowser>/ui"
+    SET_EXECUTABLE_TARGET_PROPERTIES(${nebula_target})
+    add_dependencies(${nebula_target} libcef_dll_wrapper)
 
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/assets"
-        "$<TARGET_FILE_DIR:NebulaBrowser>/ui/assets"
+    target_include_directories(${nebula_target} PRIVATE
+        "${CMAKE_SOURCE_DIR}/src"
+        "${CEF_ROOT}"
+        "${CEF_ROOT}/include"
+    )
 
-    COMMENT "Copying Nebula UI files and assets..."
-)
+    target_link_libraries(${nebula_target} PRIVATE
+        libcef_lib
+        libcef_dll_wrapper
+        ${CEF_STANDARD_LIBS}
+    )
+
+    if(MSVC)
+        set_property(TARGET ${nebula_target} PROPERTY
+            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+        )
+    endif()
+
+    # ------------------------------------------------------------
+    # Platform-specific CEF runtime deployment
+    # ------------------------------------------------------------
+
+    if(OS_WINDOWS)
+        target_link_libraries(${nebula_target} PRIVATE dwmapi)
+        target_compile_definitions(${nebula_target} PRIVATE
+            NOMINMAX
+            WIN32_LEAN_AND_MEAN
+        )
+        COPY_FILES("${nebula_target}" "${CEF_BINARY_FILES}" "${CEF_BINARY_DIR_RELEASE}" "${CEF_TARGET_OUT_DIR}")
+        COPY_FILES("${nebula_target}" "${CEF_RESOURCE_FILES}" "${CEF_RESOURCE_DIR}" "${CEF_TARGET_OUT_DIR}")
+    elseif(OS_LINUX)
+        COPY_FILES("${nebula_target}" "${CEF_BINARY_FILES}" "${CEF_BINARY_DIR_RELEASE}" "${CEF_TARGET_OUT_DIR}")
+        COPY_FILES("${nebula_target}" "${CEF_RESOURCE_FILES}" "${CEF_RESOURCE_DIR}" "${CEF_TARGET_OUT_DIR}")
+    elseif(OS_MACOSX)
+        set(NEBULA_APP "${CEF_TARGET_OUT_DIR}/${nebula_target}.app")
+        COPY_MAC_FRAMEWORK(
+            "${nebula_target}"
+            "Chromium Embedded Framework"
+            "${CEF_BINARY_DIR_RELEASE}"
+            "${NEBULA_APP}/Contents/Frameworks"
+        )
+        COPY_FILES(
+            "${nebula_target}"
+            "${CEF_BINARY_FILES}"
+            "${CEF_BINARY_DIR_RELEASE}"
+            "${NEBULA_APP}/Contents/Frameworks"
+        )
+        COPY_FILES(
+            "${nebula_target}"
+            "${CEF_RESOURCE_FILES}"
+            "${CEF_RESOURCE_DIR}"
+            "${NEBULA_APP}/Contents/Resources"
+        )
+    endif()
+
+    # ------------------------------------------------------------
+    # Copy Nebula UI files after build
+    # ------------------------------------------------------------
+
+    add_custom_command(TARGET ${nebula_target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/ui"
+            "$<TARGET_FILE_DIR:${nebula_target}>/ui"
+
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:${nebula_target}>/ui/assets"
+
+        COMMENT "Copying Nebula UI files and assets for ${nebula_target}..."
+    )
+endfunction()
+
+add_nebula_app_target(NebulaBrowser app/main.cpp)
+add_nebula_app_target(NebulaBigPicture app/main_bigpicture.cpp)

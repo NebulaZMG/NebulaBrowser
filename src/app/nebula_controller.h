@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "app/run.h"
 #include "browser/tab_manager.h"
 #include "cef/browser_client.h"
 #include "platform/types.h"
@@ -16,7 +17,9 @@ class NebulaController final : public nebula::window::WindowDelegate,
                               public nebula::browser::TabObserver,
                               public nebula::cef::BrowserClientDelegate {
 public:
-    NebulaController(nebula::platform::AppStartup startup, std::string initial_url);
+    NebulaController(nebula::platform::AppStartup startup,
+                     std::string initial_url,
+                     LaunchOptions launch_options = {});
     ~NebulaController() override;
 
     bool Create();
@@ -45,7 +48,11 @@ private:
     void ActivateTab(int tab_id);
     void CloseTab(int tab_id);
     void CreateChromeBrowser();
+    void CreateBigPictureBrowser();
     void CreateContentBrowser();
+    void EnterBigPictureMode();
+    void ExitBigPictureMode();
+    nebula::window::BrowserLayout CurrentBrowserLayout() const;
     void ToggleMenuPopup();
     void CloseMenuPopup();
     void CreateMenuPopupBrowser();
@@ -54,27 +61,41 @@ private:
     void ToggleDevTools();
     void AdjustZoom(double delta);
     void FreshReload();
+    void SendBigPictureMouseMove(const std::string& payload);
+    void SendBigPictureMouseClick(const std::string& payload, bool right_click);
+    void SendBigPictureMouseWheel(const std::string& payload);
+    void SendBigPictureText(const std::string& payload);
+    void SetBigPictureBrowseVisible(bool visible);
     void SetContentFullscreen(bool fullscreen);
     void ResizeBrowsers();
     void SendChromeState(const nebula::browser::NebulaTab& tab);
+    void SendBigPictureState(const nebula::browser::NebulaTab& tab);
     void RecordSiteHistory(const std::string& url);
     void InjectSettingsHistory(CefRefPtr<CefBrowser> browser);
+    void InjectBigPictureCursor(CefRefPtr<CefBrowser> browser);
+    void RemoveBigPictureCursor(CefRefPtr<CefBrowser> browser);
     void PersistSession() const;
     void MaybeFinishShutdown();
     bool ForgetClosingTabBrowser(CefRefPtr<CefBrowser> browser);
 
     nebula::platform::AppStartup startup_;
     std::string initial_url_;
+    LaunchOptions launch_options_;
     bool closing_ = false;
     bool chrome_ready_ = false;
+    bool big_picture_ready_ = false;
+    bool big_picture_mode_ = false;
+    bool big_picture_browse_visible_ = false;
     bool content_fullscreen_ = false;
     bool menu_popup_visible_ = false;
 
     std::unique_ptr<nebula::window::NebulaWindow> window_;
     nebula::browser::TabManager tabs_;
     CefRefPtr<CefBrowser> chrome_browser_;
+    CefRefPtr<CefBrowser> big_picture_browser_;
     CefRefPtr<CefBrowser> menu_popup_browser_;
     CefRefPtr<nebula::cef::NebulaBrowserClient> chrome_client_;
+    CefRefPtr<nebula::cef::NebulaBrowserClient> big_picture_client_;
     CefRefPtr<nebula::cef::NebulaBrowserClient> content_client_;
     CefRefPtr<nebula::cef::NebulaBrowserClient> menu_popup_client_;
     std::vector<CefRefPtr<CefBrowser>> closing_tab_browsers_;

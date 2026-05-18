@@ -34,6 +34,12 @@ void RaiseBrowserWindow(NativeWindow browser_window) {
     UNREFERENCED_PARAMETER(browser_window);
 }
 
+void MoveCursorToBrowserPoint(NativeWindow browser_window, int x, int y) {
+    UNREFERENCED_PARAMETER(browser_window);
+    UNREFERENCED_PARAMETER(x);
+    UNREFERENCED_PARAMETER(y);
+}
+
 int ScaleForParentWindow(NativeWindow parent, int value) {
     UNREFERENCED_PARAMETER(parent);
     return value;

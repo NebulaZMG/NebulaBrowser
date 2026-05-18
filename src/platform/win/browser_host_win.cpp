@@ -75,6 +75,20 @@ void RaiseBrowserWindow(NativeWindow browser_window) {
     SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 }
 
+void MoveCursorToBrowserPoint(NativeWindow browser_window, int x, int y) {
+    const HWND hwnd = AsHwnd(browser_window);
+    if (!hwnd) {
+        return;
+    }
+
+    POINT point = {x, y};
+    if (!ClientToScreen(hwnd, &point)) {
+        return;
+    }
+
+    SetCursorPos(point.x, point.y);
+}
+
 int ScaleForParentWindow(NativeWindow parent, int value) {
     const HWND hwnd = AsHwnd(parent);
     if (!hwnd) {

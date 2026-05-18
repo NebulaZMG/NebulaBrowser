@@ -94,6 +94,54 @@ int ParseTabId(const std::string& value) {
     return result.ec == std::errc{} && result.ptr == value.data() + value.size() ? tab_id : 0;
 }
 
+bool ParseTwoInts(const std::string& value, int& first, int& second) {
+    const size_t separator = value.find(',');
+    if (separator == std::string::npos) {
+        return false;
+    }
+
+    const std::string first_value = value.substr(0, separator);
+    const std::string second_value = value.substr(separator + 1);
+    const auto first_result =
+        std::from_chars(first_value.data(), first_value.data() + first_value.size(), first);
+    const auto second_result =
+        std::from_chars(second_value.data(), second_value.data() + second_value.size(), second);
+    return first_result.ec == std::errc{} && first_result.ptr == first_value.data() + first_value.size() &&
+           second_result.ec == std::errc{} && second_result.ptr == second_value.data() + second_value.size();
+}
+
+bool ParseFourInts(const std::string& value, int& first, int& second, int& third, int& fourth) {
+    const size_t first_separator = value.find(',');
+    if (first_separator == std::string::npos) {
+        return false;
+    }
+    const size_t second_separator = value.find(',', first_separator + 1);
+    if (second_separator == std::string::npos) {
+        return false;
+    }
+    const size_t third_separator = value.find(',', second_separator + 1);
+    if (third_separator == std::string::npos) {
+        return false;
+    }
+
+    const std::string first_value = value.substr(0, first_separator);
+    const std::string second_value = value.substr(first_separator + 1, second_separator - first_separator - 1);
+    const std::string third_value = value.substr(second_separator + 1, third_separator - second_separator - 1);
+    const std::string fourth_value = value.substr(third_separator + 1);
+    const auto first_result =
+        std::from_chars(first_value.data(), first_value.data() + first_value.size(), first);
+    const auto second_result =
+        std::from_chars(second_value.data(), second_value.data() + second_value.size(), second);
+    const auto third_result =
+        std::from_chars(third_value.data(), third_value.data() + third_value.size(), third);
+    const auto fourth_result =
+        std::from_chars(fourth_value.data(), fourth_value.data() + fourth_value.size(), fourth);
+    return first_result.ec == std::errc{} && first_result.ptr == first_value.data() + first_value.size() &&
+           second_result.ec == std::errc{} && second_result.ptr == second_value.data() + second_value.size() &&
+           third_result.ec == std::errc{} && third_result.ptr == third_value.data() + third_value.size() &&
+           fourth_result.ec == std::errc{} && fourth_result.ptr == fourth_value.data() + fourth_value.size();
+}
+
 std::string WithCacheBuster(std::string url) {
     if (url.empty()) {
         return url;
@@ -124,9 +172,12 @@ void SetBrowserVisible(CefRefPtr<CefBrowser> browser, bool visible) {
 
 }  // namespace
 
-NebulaController::NebulaController(nebula::platform::AppStartup startup, std::string initial_url)
+NebulaController::NebulaController(nebula::platform::AppStartup startup,
+                                   std::string initial_url,
+                                   LaunchOptions launch_options)
     : startup_(startup),
       initial_url_(std::move(initial_url)),
+      launch_options_(launch_options),
       tabs_(this),
       site_history_(LoadSiteHistory()) {}
 
@@ -138,6 +189,11 @@ bool NebulaController::Create() {
 }
 
 void NebulaController::OnWindowCreated() {
+    big_picture_mode_ = launch_options_.mode == AppMode::BigPicture;
+    if (big_picture_mode_ && window_) {
+        window_->SetFullscreen(true);
+    }
+
     if (initial_url_.empty()) {
         tabs_.CreateInitialTab(nebula::ui::GetHomeUrl());
     } else {
@@ -145,8 +201,13 @@ void NebulaController::OnWindowCreated() {
     }
     PersistSession();
 
-    CreateChromeBrowser();
+    if (!big_picture_mode_) {
+        CreateChromeBrowser();
+    }
     CreateContentBrowser();
+    if (big_picture_mode_) {
+        CreateBigPictureBrowser();
+    }
 }
 
 void NebulaController::OnWindowResized(const nebula::window::BrowserLayout& layout) {
@@ -178,6 +239,9 @@ void NebulaController::OnWindowCloseRequested() {
     if (chrome_browser_) {
         chrome_browser_->GetHost()->CloseBrowser(true);
     }
+    if (big_picture_browser_) {
+        big_picture_browser_->GetHost()->CloseBrowser(true);
+    }
     if (menu_popup_browser_) {
         menu_popup_browser_->GetHost()->CloseBrowser(true);
     }
@@ -200,6 +264,12 @@ void NebulaController::OnActiveTabChanged(const nebula::browser::NebulaTab& tab)
     if (chrome_ready_) {
         SendChromeState(tab);
     }
+    if (big_picture_ready_) {
+        SendBigPictureState(tab);
+    }
+    if (big_picture_mode_) {
+        InjectBigPictureCursor(tab.browser);
+    }
 }
 
 void NebulaController::OnBrowserCreated(nebula::cef::BrowserRole role, CefRefPtr<CefBrowser> browser) {
@@ -212,6 +282,13 @@ void NebulaController::OnBrowserCreated(nebula::cef::BrowserRole role, CefRefPtr
         chrome_ready_ = true;
         if (const auto* tab = tabs_.ActiveTab()) {
             SendChromeState(*tab);
+        }
+    } else if (role == nebula::cef::BrowserRole::BigPicture) {
+        big_picture_browser_ = browser;
+        big_picture_ready_ = true;
+        SetBrowserVisible(big_picture_browser_, big_picture_mode_);
+        if (const auto* tab = tabs_.ActiveTab()) {
+            SendBigPictureState(*tab);
         }
     } else if (role == nebula::cef::BrowserRole::MenuPopup) {
         menu_popup_browser_ = browser;
@@ -229,6 +306,11 @@ void NebulaController::OnBrowserClosing(nebula::cef::BrowserRole role, CefRefPtr
     if (role == nebula::cef::BrowserRole::Chrome) {
         chrome_browser_ = nullptr;
         chrome_ready_ = false;
+    } else if (role == nebula::cef::BrowserRole::BigPicture) {
+        big_picture_browser_ = nullptr;
+        big_picture_client_ = nullptr;
+        big_picture_ready_ = false;
+        big_picture_mode_ = false;
     } else if (role == nebula::cef::BrowserRole::MenuPopup) {
         menu_popup_browser_ = nullptr;
         menu_popup_client_ = nullptr;
@@ -277,8 +359,7 @@ void NebulaController::OnChromeCommand(const std::string& command, const std::st
         CloseMenuPopup();
         tabs_.LoadURL(nebula::ui::GetSettingsUrl());
     } else if (command == "big-picture") {
-        CloseMenuPopup();
-        tabs_.LoadURL(nebula::ui::GetBigPictureUrl());
+        EnterBigPictureMode();
     } else if (command == "gpu-diagnostics") {
         CloseMenuPopup();
         tabs_.LoadURL(nebula::ui::GetGpuDiagnosticsUrl());
@@ -306,6 +387,25 @@ void NebulaController::OnChromeCommand(const std::string& command, const std::st
         if (auto* tab = tabs_.ActiveTab(); tab && tab->browser) {
             InjectSettingsHistory(tab->browser);
         }
+        if (auto* tab = tabs_.ActiveTab()) {
+            SendBigPictureState(*tab);
+        }
+    } else if (command == "clear-search-history") {
+        if (auto* tab = tabs_.ActiveTab()) {
+            SendBigPictureState(*tab);
+        }
+    } else if (command == "bigpicture-mouse-move") {
+        SendBigPictureMouseMove(payload);
+    } else if (command == "bigpicture-click") {
+        SendBigPictureMouseClick(payload, false);
+    } else if (command == "bigpicture-right-click") {
+        SendBigPictureMouseClick(payload, true);
+    } else if (command == "bigpicture-scroll") {
+        SendBigPictureMouseWheel(payload);
+    } else if (command == "bigpicture-text") {
+        SendBigPictureText(payload);
+    } else if (command == "bigpicture-browse-visible") {
+        SetBigPictureBrowseVisible(payload == "1" || payload == "true");
     } else if (command == "minimize" && window_) {
         window_->Minimize();
     } else if (command == "maximize" && window_) {
@@ -313,7 +413,11 @@ void NebulaController::OnChromeCommand(const std::string& command, const std::st
     } else if (command == "close" && window_) {
         OnWindowCloseRequested();
     } else if (command == "exit-bigpicture" && window_) {
-        OnWindowCloseRequested();
+        if (launch_options_.mode == AppMode::BigPicture) {
+            OnWindowCloseRequested();
+            return;
+        }
+        ExitBigPictureMode();
     } else if (command == "drag" && window_) {
         window_->BeginDrag();
     }
@@ -326,6 +430,9 @@ void NebulaController::OnContentAddressChanged(CefRefPtr<CefBrowser> browser, co
                         ? nebula::ui::GetHomeUrl()
                         : internal_url);
     RecordSiteHistory(internal_url);
+    if (const auto* active_tab = tabs_.ActiveTab()) {
+        SendBigPictureState(*active_tab);
+    }
     PersistSession();
 }
 
@@ -350,6 +457,7 @@ void NebulaController::OnContentLoadFinished(CefRefPtr<CefBrowser> browser, cons
     if (nebula::ui::ToInternalUrl(url).starts_with(nebula::ui::GetSettingsUrl())) {
         InjectSettingsHistory(browser);
     }
+    InjectBigPictureCursor(browser);
 }
 
 void NebulaController::OnContentFaviconChanged(CefRefPtr<CefBrowser> browser, const std::vector<std::string>& urls) {
@@ -457,13 +565,32 @@ void NebulaController::CreateChromeBrowser() {
         return;
     }
 
-    const auto layout = window_->CurrentLayout();
+    const auto layout = CurrentBrowserLayout();
     CefBrowserSettings browser_settings = BrowserSettings();
     chrome_client_ = new nebula::cef::NebulaBrowserClient(nebula::cef::BrowserRole::Chrome, this);
     CefWindowInfo window_info =
         nebula::platform::MakeChildWindowInfo(window_->native_handle(), layout.chrome);
     CefBrowserHost::CreateBrowser(
         window_info, chrome_client_, nebula::ui::GetChromeUrl(), browser_settings, nullptr, nullptr);
+}
+
+void NebulaController::CreateBigPictureBrowser() {
+    if (!window_ || !window_->native_handle()) {
+        return;
+    }
+
+    const auto layout = CurrentBrowserLayout();
+    CefBrowserSettings browser_settings = BrowserSettings();
+    big_picture_client_ = new nebula::cef::NebulaBrowserClient(nebula::cef::BrowserRole::BigPicture, this);
+    CefWindowInfo window_info =
+        nebula::platform::MakeChildWindowInfo(window_->native_handle(), layout.chrome);
+    CefBrowserHost::CreateBrowser(
+        window_info,
+        big_picture_client_,
+        nebula::ui::ResolveInternalUrl(nebula::ui::GetBigPictureUrl()),
+        browser_settings,
+        nullptr,
+        nullptr);
 }
 
 void NebulaController::CreateContentBrowser() {
@@ -473,7 +600,7 @@ void NebulaController::CreateContentBrowser() {
 
     const auto* tab = tabs_.ActiveTab();
     const std::string url = tab && !tab->url.empty() ? tab->url : nebula::ui::GetHomeUrl();
-    const auto layout = window_->CurrentLayout();
+    const auto layout = CurrentBrowserLayout();
     CefBrowserSettings browser_settings = BrowserSettings();
     content_client_ = new nebula::cef::NebulaBrowserClient(nebula::cef::BrowserRole::Content, this);
     CefWindowInfo window_info =
@@ -482,7 +609,94 @@ void NebulaController::CreateContentBrowser() {
         window_info, content_client_, nebula::ui::ResolveInternalUrl(url), browser_settings, nullptr, nullptr);
 }
 
+void NebulaController::EnterBigPictureMode() {
+    if (big_picture_mode_) {
+        return;
+    }
+
+    CloseMenuPopup();
+    if (content_fullscreen_) {
+        SetContentFullscreen(false);
+    }
+
+    big_picture_mode_ = true;
+    big_picture_browse_visible_ = false;
+    if (auto* tab = tabs_.ActiveTab()) {
+        InjectBigPictureCursor(tab->browser);
+    }
+    SetBrowserVisible(chrome_browser_, false);
+    if (big_picture_browser_) {
+        SetBrowserVisible(big_picture_browser_, true);
+        if (const auto* tab = tabs_.ActiveTab()) {
+            SendBigPictureState(*tab);
+        }
+    } else {
+        CreateBigPictureBrowser();
+    }
+    ResizeBrowsers();
+}
+
+void NebulaController::ExitBigPictureMode() {
+    if (!big_picture_mode_) {
+        return;
+    }
+
+    big_picture_mode_ = false;
+    big_picture_browse_visible_ = false;
+    if (auto* tab = tabs_.ActiveTab()) {
+        RemoveBigPictureCursor(tab->browser);
+    }
+    SetBrowserVisible(big_picture_browser_, false);
+    SetBrowserVisible(chrome_browser_, true);
+    if (const auto* tab = tabs_.ActiveTab()) {
+        SendChromeState(*tab);
+    }
+    ResizeBrowsers();
+}
+
+nebula::window::BrowserLayout NebulaController::CurrentBrowserLayout() const {
+    if (!window_) {
+        return {};
+    }
+
+    if (!big_picture_mode_) {
+        return window_->CurrentLayout(!content_fullscreen_);
+    }
+
+    const auto client_size = nebula::platform::ParentClientSize(window_->native_handle());
+    if (!big_picture_browse_visible_) {
+        nebula::window::BrowserLayout layout;
+        layout.chrome = {0, 0, client_size.first, client_size.second};
+        layout.content = {};
+        return layout;
+    }
+
+    nebula::window::BrowserLayout layout;
+    layout.chrome = {0, 0, client_size.first, client_size.second};
+
+    // left_margin must clear the 220px sidebar; right_margin must clear the
+    // native-browser-panel (clamp(168,18vw,260) + 20px right inset ≈ 280px max).
+    // top/bottom margins must clear the header (~68px) and footer (~56px).
+    const int left_margin  = nebula::platform::ScaleForParentWindow(window_->native_handle(), 224);
+    const int right_margin = nebula::platform::ScaleForParentWindow(window_->native_handle(), 284);
+    const int top_margin   = nebula::platform::ScaleForParentWindow(window_->native_handle(), 68);
+    const int bottom_margin = nebula::platform::ScaleForParentWindow(window_->native_handle(), 56);
+    const int available_width = std::max(0, client_size.first - left_margin - right_margin);
+    const int available_height = std::max(0, client_size.second - top_margin - bottom_margin);
+
+    layout.content = {
+        left_margin,
+        top_margin,
+        available_width,
+        available_height};
+    return layout;
+}
+
 void NebulaController::ToggleMenuPopup() {
+    if (big_picture_mode_) {
+        return;
+    }
+
     if (menu_popup_browser_ && menu_popup_visible_) {
         CloseMenuPopup();
         return;
@@ -507,7 +721,7 @@ void NebulaController::CloseMenuPopup() {
 }
 
 void NebulaController::CreateMenuPopupBrowser() {
-    if (!window_ || !window_->native_handle() || content_fullscreen_) {
+    if (!window_ || !window_->native_handle() || content_fullscreen_ || big_picture_mode_) {
         return;
     }
 
@@ -591,6 +805,110 @@ void NebulaController::FreshReload() {
     tabs_.LoadURL(WithCacheBuster(tab->url));
 }
 
+void NebulaController::SendBigPictureMouseMove(const std::string& payload) {
+    auto* tab = tabs_.ActiveTab();
+    if (!tab || !tab->browser) {
+        return;
+    }
+
+    int x = 0;
+    int y = 0;
+    if (!ParseTwoInts(payload, x, y)) {
+        return;
+    }
+
+    CefMouseEvent event = {};
+    event.x = x;
+    event.y = y;
+    nebula::platform::MoveCursorToBrowserPoint(tab->browser->GetHost()->GetWindowHandle(), x, y);
+    tab->browser->GetHost()->SendMouseMoveEvent(event, false);
+}
+
+void NebulaController::SendBigPictureMouseClick(const std::string& payload, bool right_click) {
+    auto* tab = tabs_.ActiveTab();
+    if (!tab || !tab->browser) {
+        return;
+    }
+
+    int x = 0;
+    int y = 0;
+    if (!ParseTwoInts(payload, x, y)) {
+        return;
+    }
+
+    CefMouseEvent event = {};
+    event.x = x;
+    event.y = y;
+    const auto button = right_click ? MBT_RIGHT : MBT_LEFT;
+    nebula::platform::MoveCursorToBrowserPoint(tab->browser->GetHost()->GetWindowHandle(), x, y);
+    tab->browser->GetHost()->SendMouseMoveEvent(event, false);
+    tab->browser->GetHost()->SendMouseClickEvent(event, button, false, 1);
+    tab->browser->GetHost()->SendMouseClickEvent(event, button, true, 1);
+}
+
+void NebulaController::SendBigPictureMouseWheel(const std::string& payload) {
+    auto* tab = tabs_.ActiveTab();
+    if (!tab || !tab->browser) {
+        return;
+    }
+
+    int delta_x = 0;
+    int delta_y = 0;
+    int x = 0;
+    int y = 0;
+    const bool has_pointer = ParseFourInts(payload, delta_x, delta_y, x, y);
+    if (!has_pointer && !ParseTwoInts(payload, delta_x, delta_y)) {
+        return;
+    }
+
+    const auto layout = CurrentBrowserLayout();
+    CefMouseEvent event = {};
+    event.x = has_pointer ? std::clamp(x, 0, std::max(0, layout.content.width - 1))
+                          : std::max(0, layout.content.width / 2);
+    event.y = has_pointer ? std::clamp(y, 0, std::max(0, layout.content.height - 1))
+                          : std::max(0, layout.content.height / 2);
+    tab->browser->GetHost()->SendMouseWheelEvent(event, delta_x, delta_y);
+}
+
+void NebulaController::SendBigPictureText(const std::string& payload) {
+    auto* tab = tabs_.ActiveTab();
+    if (!tab || !tab->browser) {
+        return;
+    }
+
+    const std::string script =
+        "(function(){"
+        "const el=document.activeElement;"
+        "if(!el)return;"
+        "const value=\"" + nebula::browser::JsonEscape(payload) + "\";"
+        "const editable=el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.isContentEditable;"
+        "if(!editable)return;"
+        "if(el.isContentEditable){el.textContent=value;}else{el.value=value;}"
+        "el.dispatchEvent(new Event('input',{bubbles:true}));"
+        "el.dispatchEvent(new Event('change',{bubbles:true}));"
+        "el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true}));"
+        "el.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',keyCode:13,bubbles:true}));"
+        "})();";
+    tab->browser->GetMainFrame()->ExecuteJavaScript(script, tab->url, 0);
+}
+
+void NebulaController::SetBigPictureBrowseVisible(bool visible) {
+    if (big_picture_browse_visible_ == visible) {
+        return;
+    }
+
+    big_picture_browse_visible_ = visible;
+    if (visible) {
+        if (auto* tab = tabs_.ActiveTab()) {
+            InjectBigPictureCursor(tab->browser);
+        }
+    }
+    ResizeBrowsers();
+    if (const auto* tab = tabs_.ActiveTab()) {
+        SendBigPictureState(*tab);
+    }
+}
+
 void NebulaController::SetContentFullscreen(bool fullscreen) {
     if (content_fullscreen_ == fullscreen) {
         return;
@@ -599,6 +917,7 @@ void NebulaController::SetContentFullscreen(bool fullscreen) {
     content_fullscreen_ = fullscreen;
     if (fullscreen) {
         CloseMenuPopup();
+        ExitBigPictureMode();
     }
 
     SetBrowserVisible(chrome_browser_, !fullscreen);
@@ -613,18 +932,24 @@ void NebulaController::ResizeBrowsers() {
         return;
     }
 
-    const auto layout = window_->CurrentLayout(!content_fullscreen_);
+    const auto layout = CurrentBrowserLayout();
     if (chrome_browser_) {
         window_->ResizeChild(
             chrome_browser_->GetHost()->GetWindowHandle(),
             layout.chrome);
     }
+    if (big_picture_browser_) {
+        window_->ResizeChild(
+            big_picture_browser_->GetHost()->GetWindowHandle(),
+            layout.chrome);
+    }
     if (const auto* tab = tabs_.ActiveTab(); tab && tab->browser) {
+        SetBrowserVisible(tab->browser, !big_picture_mode_ || big_picture_browse_visible_);
         window_->ResizeChild(
             tab->browser->GetHost()->GetWindowHandle(),
             layout.content);
     }
-    if (!content_fullscreen_) {
+    if (!content_fullscreen_ && !big_picture_mode_) {
         PositionMenuPopup();
     }
 }
@@ -672,6 +997,71 @@ void NebulaController::SendChromeState(const nebula::browser::NebulaTab& tab) {
     chrome_browser_->GetMainFrame()->ExecuteJavaScript(script, nebula::ui::GetChromeUrl(), 0);
 }
 
+void NebulaController::SendBigPictureState(const nebula::browser::NebulaTab& tab) {
+    if (!big_picture_browser_) {
+        return;
+    }
+
+    const std::string display_url = GetChromeDisplayUrl(tab.url);
+    double zoom_level = 0.0;
+    if (tab.browser) {
+        zoom_level = tab.browser->GetHost()->GetZoomLevel();
+    }
+
+    std::string tabs_json = "[";
+    const auto& tabs = tabs_.Tabs();
+    for (size_t i = 0; i < tabs.size(); ++i) {
+        const auto& item = tabs[i];
+        if (i > 0) {
+            tabs_json += ",";
+        }
+        tabs_json +=
+            "{\"id\":" + std::to_string(item.id) +
+            ",\"title\":\"" + nebula::browser::JsonEscape(item.title) + "\"" +
+            ",\"url\":\"" + nebula::browser::JsonEscape(item.url) + "\"" +
+            ",\"isLoading\":" + std::string(item.is_loading ? "true" : "false") +
+            ",\"favicon\":\"" + nebula::browser::JsonEscape(item.favicon_url) + "\"" +
+            "}";
+    }
+    tabs_json += "]";
+
+    std::string history_json = "[";
+    for (size_t i = 0; i < site_history_.size(); ++i) {
+        if (i > 0) {
+            history_json += ",";
+        }
+        history_json += "\"" + nebula::browser::JsonEscape(site_history_[i]) + "\"";
+    }
+    history_json += "]";
+
+    const auto layout = CurrentBrowserLayout();
+    const std::string script =
+        "window.NebulaBigPicture && window.NebulaBigPicture.applyState({"
+        "\"id\":" + std::to_string(tab.id) +
+        ",\"url\":\"" + nebula::browser::JsonEscape(display_url) + "\""
+        ",\"title\":\"" + nebula::browser::JsonEscape(tab.title) + "\""
+        ",\"isLoading\":" + std::string(tab.is_loading ? "true" : "false") +
+        ",\"progress\":" + std::to_string(tab.load_progress) +
+        ",\"canGoBack\":" + std::string(tab.CanGoBack() ? "true" : "false") +
+        ",\"canGoForward\":" + std::string(tab.CanGoForward() ? "true" : "false") +
+        ",\"favicon\":\"" + nebula::browser::JsonEscape(tab.favicon_url) + "\"" +
+        ",\"zoomLevel\":" + std::to_string(zoom_level) +
+        ",\"browserLayout\":{"
+        "\"x\":" + std::to_string(layout.content.x) +
+        ",\"y\":" + std::to_string(layout.content.y) +
+        ",\"width\":" + std::to_string(layout.content.width) +
+        ",\"height\":" + std::to_string(layout.content.height) +
+        "}" +
+        ",\"tabs\":" + tabs_json +
+        ",\"history\":" + history_json +
+        "});";
+
+    big_picture_browser_->GetMainFrame()->ExecuteJavaScript(
+        script,
+        nebula::ui::GetBigPictureUrl(),
+        0);
+}
+
 void NebulaController::RecordSiteHistory(const std::string& url) {
     if (!IsSiteHistoryUrl(url)) {
         return;
@@ -699,6 +1089,44 @@ void NebulaController::InjectSettingsHistory(CefRefPtr<CefBrowser> browser) {
     browser->GetMainFrame()->ExecuteJavaScript(script, nebula::ui::GetSettingsUrl(), 0);
 }
 
+void NebulaController::InjectBigPictureCursor(CefRefPtr<CefBrowser> browser) {
+    if (!big_picture_mode_ || !browser) {
+        return;
+    }
+
+    static constexpr char kScript[] = R"JS(
+(function(){
+  const id = 'nebula-bigpicture-custom-cursor';
+  const cursor = 'url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2232%22%20height%3D%2232%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M5%203v24l6.6-6.4%204.1%208.5%204.3-2.1-4.1-8.3H25L5%203z%22%20fill%3D%22%2300C6FF%22%20stroke%3D%22%23FFFFFF%22%20stroke-width%3D%222.2%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22M9%207.7v9.8l2.5-2.4%202%204.1%201.5-.7-2-4h4L9%207.7z%22%20fill%3D%22%237B2EFF%22%20opacity%3D%220.8%22%2F%3E%3C%2Fsvg%3E") 5 3, auto';
+  const css = 'html, body, body * { cursor: ' + cursor + ' !important; }';
+  let style = document.getElementById(id);
+  if (!style) {
+    style = document.createElement('style');
+    style.id = id;
+    (document.head || document.documentElement).appendChild(style);
+  }
+  style.textContent = css;
+})();
+)JS";
+    browser->GetMainFrame()->ExecuteJavaScript(kScript, browser->GetMainFrame()->GetURL(), 0);
+}
+
+void NebulaController::RemoveBigPictureCursor(CefRefPtr<CefBrowser> browser) {
+    if (!browser) {
+        return;
+    }
+
+    static constexpr char kScript[] = R"JS(
+(function(){
+  const style = document.getElementById('nebula-bigpicture-custom-cursor');
+  if (style) {
+    style.remove();
+  }
+})();
+)JS";
+    browser->GetMainFrame()->ExecuteJavaScript(kScript, browser->GetMainFrame()->GetURL(), 0);
+}
+
 void NebulaController::PersistSession() const {
     nebula::browser::SaveSessionState(tabs_.Tabs(), tabs_.ActiveTabIndex());
 }
@@ -708,7 +1136,7 @@ void NebulaController::MaybeFinishShutdown() {
         return;
     }
 
-    if (chrome_browser_ || menu_popup_browser_ || tabs_.HasOpenBrowsers()) {
+    if (chrome_browser_ || big_picture_browser_ || menu_popup_browser_ || tabs_.HasOpenBrowsers()) {
         return;
     }
 

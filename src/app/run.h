@@ -4,6 +4,15 @@
 
 namespace nebula::app {
 
-int RunNebula(const nebula::platform::AppStartup& startup);
+enum class AppMode {
+    Desktop,
+    BigPicture,
+};
+
+struct LaunchOptions {
+    AppMode mode = AppMode::Desktop;
+};
+
+int RunNebula(const nebula::platform::AppStartup& startup, LaunchOptions options = {});
 
 }  // namespace nebula::app

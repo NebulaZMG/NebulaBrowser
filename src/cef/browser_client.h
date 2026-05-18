@@ -16,6 +16,7 @@ namespace nebula::cef {
 enum class BrowserRole {
     Chrome,
     Content,
+    BigPicture,
     MenuPopup,
 };
 

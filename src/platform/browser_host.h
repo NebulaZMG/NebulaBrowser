@@ -13,6 +13,7 @@ CefWindowInfo MakeDevToolsPopup(NativeWindow parent, const char* title);
 void ResizeBrowserWindow(NativeWindow browser_window, const Rect& rect);
 void SetBrowserVisible(NativeWindow browser_window, bool visible);
 void RaiseBrowserWindow(NativeWindow browser_window);
+void MoveCursorToBrowserPoint(NativeWindow browser_window, int x, int y);
 Rect MenuPopupRect(NativeWindow parent, const BrowserLayout& layout);
 std::string CacheBusterToken();
 void DestroyTopLevelWindow(NativeWindow window);

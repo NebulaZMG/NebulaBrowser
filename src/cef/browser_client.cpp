@@ -35,6 +35,33 @@ bool IsBigPictureFrame(CefRefPtr<CefFrame> frame) {
            url.starts_with("nebula://big-picture");
 }
 
+bool IsBigPictureCommand(const std::string& command) {
+    return command == "navigate" ||
+           command == "new-tab" ||
+           command == "activate-tab" ||
+           command == "close-tab" ||
+           command == "back" ||
+           command == "forward" ||
+           command == "reload" ||
+           command == "stop" ||
+           command == "home" ||
+           command == "settings" ||
+           command == "open-settings" ||
+           command == "big-picture" ||
+           command == "exit-bigpicture" ||
+           command == "gpu-diagnostics" ||
+           command == "zoom-out" ||
+           command == "zoom-in" ||
+           command == "clear-site-history" ||
+           command == "clear-search-history" ||
+           command == "bigpicture-mouse-move" ||
+           command == "bigpicture-click" ||
+           command == "bigpicture-right-click" ||
+           command == "bigpicture-scroll" ||
+           command == "bigpicture-text" ||
+           command == "bigpicture-browse-visible";
+}
+
 std::vector<std::string> ToStringVector(const std::vector<CefString>& values) {
     std::vector<std::string> result;
     result.reserve(values.size());
@@ -62,7 +89,7 @@ bool NebulaBrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser
     }
 
     if (role_ != BrowserRole::Chrome && role_ != BrowserRole::Content &&
-        role_ != BrowserRole::MenuPopup) {
+        role_ != BrowserRole::BigPicture && role_ != BrowserRole::MenuPopup) {
         return false;
     }
 
@@ -81,6 +108,10 @@ bool NebulaBrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser
             IsBigPictureFrame(frame) && command == "exit-bigpicture";
         if (!allowed_insecure_command && !allowed_settings_command &&
             !allowed_big_picture_command) {
+            return false;
+        }
+    } else if (role_ == BrowserRole::BigPicture) {
+        if (!IsBigPictureFrame(frame) || !IsBigPictureCommand(command)) {
             return false;
         }
     }

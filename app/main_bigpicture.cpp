@@ -12,11 +12,11 @@ int APIENTRY wWinMain(HINSTANCE instance,
     UNREFERENCED_PARAMETER(command_line);
 
     const nebula::platform::AppStartup startup{instance, show_command};
-    return nebula::app::RunNebula(startup, {nebula::app::AppMode::Desktop});
+    return nebula::app::RunNebula(startup, {nebula::app::AppMode::BigPicture});
 }
 #else
 int main(int argc, char* argv[]) {
     const nebula::platform::AppStartup startup{argc, argv};
-    return nebula::app::RunNebula(startup, {nebula::app::AppMode::Desktop});
+    return nebula::app::RunNebula(startup, {nebula::app::AppMode::BigPicture});
 }
 #endif
