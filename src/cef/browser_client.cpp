@@ -25,6 +25,16 @@ bool IsSettingsFrame(CefRefPtr<CefFrame> frame) {
     return nebula::ui::ToInternalUrl(frame->GetURL().ToString()).starts_with("nebula://settings");
 }
 
+bool IsBigPictureFrame(CefRefPtr<CefFrame> frame) {
+    if (!frame) {
+        return false;
+    }
+
+    const std::string url = nebula::ui::ToInternalUrl(frame->GetURL().ToString());
+    return url.starts_with("nebula://bigpicture") ||
+           url.starts_with("nebula://big-picture");
+}
+
 std::vector<std::string> ToStringVector(const std::vector<CefString>& values) {
     std::vector<std::string> result;
     result.reserve(values.size());
@@ -67,7 +77,10 @@ bool NebulaBrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser
                                        command == "new-tab" ||
                                        command == "clear-site-history" ||
                                        command == "clear-search-history");
-        if (!allowed_insecure_command && !allowed_settings_command) {
+        const bool allowed_big_picture_command =
+            IsBigPictureFrame(frame) && command == "exit-bigpicture";
+        if (!allowed_insecure_command && !allowed_settings_command &&
+            !allowed_big_picture_command) {
             return false;
         }
     }

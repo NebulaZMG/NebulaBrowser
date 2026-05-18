@@ -162,10 +162,6 @@ void NebulaController::OnWindowCloseRequested() {
     }
 
     if (closing_) {
-        // CEF re-sends WM_CLOSE to the top-level window after each Alloy
-        // child browser finishes its JS unload + DoClose phase. Destroy the
-        // Nebula window now so CEF can tear down the child browser HWNDs and
-        // fire OnBeforeClose; MaybeFinishShutdown will then quit the loop.
         if (window_ && window_->native_handle()) {
             nebula::platform::DestroyTopLevelWindow(window_->native_handle());
         }
@@ -180,16 +176,24 @@ void NebulaController::OnWindowCloseRequested() {
     }
 
     if (chrome_browser_) {
-        chrome_browser_->GetHost()->CloseBrowser(false);
+        chrome_browser_->GetHost()->CloseBrowser(true);
     }
     if (menu_popup_browser_) {
-        menu_popup_browser_->GetHost()->CloseBrowser(false);
+        menu_popup_browser_->GetHost()->CloseBrowser(true);
     }
     for (const auto& tab : tabs_.Tabs()) {
         if (tab.browser) {
-            tab.browser->GetHost()->CloseBrowser(false);
+            tab.browser->GetHost()->CloseBrowser(true);
         }
     }
+
+    // Do not wait for CEF to re-send WM_CLOSE to the host window. On some
+    // Alloy child-window paths that message never arrives, leaving the app
+    // alive with all close affordances disabled until the process is killed.
+    if (window_ && window_->native_handle()) {
+        nebula::platform::DestroyTopLevelWindow(window_->native_handle());
+    }
+    MaybeFinishShutdown();
 }
 
 void NebulaController::OnActiveTabChanged(const nebula::browser::NebulaTab& tab) {
@@ -307,7 +311,9 @@ void NebulaController::OnChromeCommand(const std::string& command, const std::st
     } else if (command == "maximize" && window_) {
         window_->ToggleMaximize();
     } else if (command == "close" && window_) {
-        window_->Close();
+        OnWindowCloseRequested();
+    } else if (command == "exit-bigpicture" && window_) {
+        OnWindowCloseRequested();
     } else if (command == "drag" && window_) {
         window_->BeginDrag();
     }
