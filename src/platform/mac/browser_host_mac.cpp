@@ -43,24 +43,19 @@ std::pair<int, int> ParentClientSize(NativeWindow parent) {
 }
 
 Rect MenuPopupRect(NativeWindow parent, const BrowserLayout& layout) {
-    const auto [client_right, client_bottom] = ParentClientSize(parent);
+    const auto client_size = ParentClientSize(parent);
     const int width = 260;
     const int height = 258;
     const int margin = 12;
     const int overlap = 2;
-    const int x = std::max(0, client_right - width - margin);
+    const int x = std::max(0, client_size.first - width - margin);
     const int y = std::max(0, layout.chrome.y + layout.chrome.height - overlap);
     return {
         x,
         y,
-        std::min(client_right, x + width) - x,
-        std::min(client_bottom, y + height) - y,
+        std::min(client_size.first, x + width) - x,
+        std::min(client_size.second, y + height) - y,
     };
-}
-
-void ApplyRoundedBrowserRegion(NativeWindow browser_window, int corner_radius) {
-    UNREFERENCED_PARAMETER(browser_window);
-    UNREFERENCED_PARAMETER(corner_radius);
 }
 
 std::string CacheBusterToken() {

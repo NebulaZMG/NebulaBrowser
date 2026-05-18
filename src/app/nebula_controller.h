@@ -41,7 +41,7 @@ public:
     bool ShouldBypassInsecureWarning(CefRefPtr<CefBrowser> browser, const std::string& target_url) override;
 
 private:
-    void CreateNewTab();
+    void CreateNewTab(std::string url = {});
     void ActivateTab(int tab_id);
     void CloseTab(int tab_id);
     void CreateChromeBrowser();
@@ -50,6 +50,7 @@ private:
     void CloseMenuPopup();
     void CreateMenuPopupBrowser();
     void PositionMenuPopup();
+    void SendMenuPopupZoom();
     void ToggleDevTools();
     void AdjustZoom(double delta);
     void FreshReload();
@@ -60,12 +61,14 @@ private:
     void InjectSettingsHistory(CefRefPtr<CefBrowser> browser);
     void PersistSession() const;
     void MaybeFinishShutdown();
+    bool ForgetClosingTabBrowser(CefRefPtr<CefBrowser> browser);
 
     nebula::platform::AppStartup startup_;
     std::string initial_url_;
     bool closing_ = false;
     bool chrome_ready_ = false;
     bool content_fullscreen_ = false;
+    bool menu_popup_visible_ = false;
 
     std::unique_ptr<nebula::window::NebulaWindow> window_;
     nebula::browser::TabManager tabs_;
@@ -74,6 +77,7 @@ private:
     CefRefPtr<nebula::cef::NebulaBrowserClient> chrome_client_;
     CefRefPtr<nebula::cef::NebulaBrowserClient> content_client_;
     CefRefPtr<nebula::cef::NebulaBrowserClient> menu_popup_client_;
+    std::vector<CefRefPtr<CefBrowser>> closing_tab_browsers_;
     std::unordered_set<std::string> insecure_warning_bypasses_;
     std::vector<std::string> site_history_;
 };

@@ -51,8 +51,8 @@ bool NebulaBrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser
         return false;
     }
 
-    if (role_ != BrowserRole::Chrome && role_ != BrowserRole::MenuPopup &&
-        role_ != BrowserRole::Content) {
+    if (role_ != BrowserRole::Chrome && role_ != BrowserRole::Content &&
+        role_ != BrowserRole::MenuPopup) {
         return false;
     }
 
@@ -64,6 +64,7 @@ bool NebulaBrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser
             command == "navigate-insecure" && IsInsecureInterstitialFrame(frame);
         const bool allowed_settings_command =
             IsSettingsFrame(frame) && (command == "navigate" ||
+                                       command == "new-tab" ||
                                        command == "clear-site-history" ||
                                        command == "clear-search-history");
         if (!allowed_insecure_command && !allowed_settings_command) {

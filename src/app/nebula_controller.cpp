@@ -155,6 +155,12 @@ void NebulaController::OnWindowResized(const nebula::window::BrowserLayout& layo
 }
 
 void NebulaController::OnWindowCloseRequested() {
+    if (!closing_ && !closing_tab_browsers_.empty()) {
+        // CEF Alloy can bubble a child browser close as WM_CLOSE on the host
+        // window. Per-tab closes should not turn into full app shutdown.
+        return;
+    }
+
     if (closing_) {
         // CEF re-sends WM_CLOSE to the top-level window after each Alloy
         // child browser finishes its JS unload + DoClose phase. Destroy the
@@ -193,7 +199,7 @@ void NebulaController::OnActiveTabChanged(const nebula::browser::NebulaTab& tab)
 }
 
 void NebulaController::OnBrowserCreated(nebula::cef::BrowserRole role, CefRefPtr<CefBrowser> browser) {
-    if (window_ && browser) {
+    if (window_ && browser && role != nebula::cef::BrowserRole::MenuPopup) {
         window_->EnableFrameHitTest(browser->GetHost()->GetWindowHandle());
     }
 
@@ -205,7 +211,9 @@ void NebulaController::OnBrowserCreated(nebula::cef::BrowserRole role, CefRefPtr
         }
     } else if (role == nebula::cef::BrowserRole::MenuPopup) {
         menu_popup_browser_ = browser;
+        menu_popup_visible_ = true;
         PositionMenuPopup();
+        SendMenuPopupZoom();
     } else {
         tabs_.SetActiveBrowser(browser);
     }
@@ -220,7 +228,9 @@ void NebulaController::OnBrowserClosing(nebula::cef::BrowserRole role, CefRefPtr
     } else if (role == nebula::cef::BrowserRole::MenuPopup) {
         menu_popup_browser_ = nullptr;
         menu_popup_client_ = nullptr;
+        menu_popup_visible_ = false;
     } else {
+        ForgetClosingTabBrowser(browser);
         if (content_fullscreen_) {
             const auto* active_tab = tabs_.ActiveTab();
             if (active_tab && active_tab->browser && active_tab->browser->IsSame(browser)) {
@@ -242,7 +252,7 @@ void NebulaController::OnChromeCommand(const std::string& command, const std::st
             tabs_.LoadURL(target);
         }
     } else if (command == "new-tab") {
-        CreateNewTab();
+        CreateNewTab(payload);
     } else if (command == "activate-tab") {
         ActivateTab(ParseTabId(payload));
     } else if (command == "close-tab") {
@@ -354,9 +364,9 @@ void NebulaController::OnPopupRequested(CefRefPtr<CefBrowser> browser, const std
         return;
     }
 
-    tabs_.LoadURL(nebula::ui::IsEmptyOrChromiumNewTabUrl(target_url)
-                      ? nebula::ui::GetHomeUrl()
-                      : target_url);
+    CreateNewTab(nebula::ui::IsEmptyOrChromiumNewTabUrl(target_url)
+                     ? nebula::ui::GetHomeUrl()
+                     : target_url);
 }
 
 bool NebulaController::ShouldBypassInsecureWarning(CefRefPtr<CefBrowser> browser, const std::string& target_url) {
@@ -373,12 +383,14 @@ bool NebulaController::ShouldBypassInsecureWarning(CefRefPtr<CefBrowser> browser
     return true;
 }
 
-void NebulaController::CreateNewTab() {
+void NebulaController::CreateNewTab(std::string url) {
     if (auto* tab = tabs_.ActiveTab()) {
         SetBrowserVisible(tab->browser, false);
     }
 
-    tabs_.CreateTab(nebula::ui::GetHomeUrl());
+    const std::string target =
+        url.empty() ? nebula::ui::GetHomeUrl() : nebula::browser::NormalizeNavigationInput(url);
+    tabs_.CreateTab(target.empty() ? nebula::ui::GetHomeUrl() : target);
     PersistSession();
     CreateContentBrowser();
 }
@@ -415,6 +427,7 @@ void NebulaController::CloseTab(int tab_id) {
     CefRefPtr<CefBrowser> closing_browser = tabs_.CloseTab(tab_id);
     PersistSession();
     if (closing_browser) {
+        closing_tab_browsers_.push_back(closing_browser);
         closing_browser->GetHost()->CloseBrowser(false);
     }
 
@@ -464,8 +477,16 @@ void NebulaController::CreateContentBrowser() {
 }
 
 void NebulaController::ToggleMenuPopup() {
-    if (menu_popup_browser_) {
+    if (menu_popup_browser_ && menu_popup_visible_) {
         CloseMenuPopup();
+        return;
+    }
+
+    if (menu_popup_browser_) {
+        menu_popup_visible_ = true;
+        PositionMenuPopup();
+        SetBrowserVisible(menu_popup_browser_, true);
+        SendMenuPopupZoom();
         return;
     }
 
@@ -474,12 +495,13 @@ void NebulaController::ToggleMenuPopup() {
 
 void NebulaController::CloseMenuPopup() {
     if (menu_popup_browser_) {
-        menu_popup_browser_->GetHost()->CloseBrowser(false);
+        menu_popup_visible_ = false;
+        SetBrowserVisible(menu_popup_browser_, false);
     }
 }
 
 void NebulaController::CreateMenuPopupBrowser() {
-    if (!window_ || !window_->native_handle()) {
+    if (!window_ || !window_->native_handle() || content_fullscreen_) {
         return;
     }
 
@@ -494,18 +516,32 @@ void NebulaController::CreateMenuPopupBrowser() {
 }
 
 void NebulaController::PositionMenuPopup() {
-    if (content_fullscreen_ || !window_ || !window_->native_handle() || !menu_popup_browser_) {
+    if (content_fullscreen_ || !window_ || !window_->native_handle() || !menu_popup_browser_ ||
+        !menu_popup_visible_) {
         return;
     }
 
     const auto rect =
         nebula::platform::MenuPopupRect(window_->native_handle(), window_->CurrentLayout());
     const auto browser_window = menu_popup_browser_->GetHost()->GetWindowHandle();
-    window_->ResizeChild(browser_window, rect);
-    nebula::platform::ApplyRoundedBrowserRegion(
-        browser_window,
-        nebula::platform::ScaleForParentWindow(window_->native_handle(), 28));
+    nebula::platform::ResizeBrowserWindow(browser_window, rect);
     nebula::platform::RaiseBrowserWindow(browser_window);
+}
+
+void NebulaController::SendMenuPopupZoom() {
+    if (!menu_popup_browser_) {
+        return;
+    }
+
+    double zoom_level = 0.0;
+    if (const auto* tab = tabs_.ActiveTab(); tab && tab->browser) {
+        zoom_level = tab->browser->GetHost()->GetZoomLevel();
+    }
+
+    const std::string script =
+        "window.NebulaMenuPopup && window.NebulaMenuPopup.setZoomLevel(" +
+        std::to_string(zoom_level) + ");";
+    menu_popup_browser_->GetMainFrame()->ExecuteJavaScript(script, nebula::ui::GetMenuPopupUrl(), 0);
 }
 
 void NebulaController::ToggleDevTools() {
@@ -534,6 +570,10 @@ void NebulaController::AdjustZoom(double delta) {
 
     CefRefPtr<CefBrowserHost> host = tab->browser->GetHost();
     host->SetZoomLevel(host->GetZoomLevel() + delta);
+    SendMenuPopupZoom();
+    if (chrome_ready_) {
+        SendChromeState(*tab);
+    }
 }
 
 void NebulaController::FreshReload() {
@@ -589,6 +629,10 @@ void NebulaController::SendChromeState(const nebula::browser::NebulaTab& tab) {
     }
 
     const std::string display_url = GetChromeDisplayUrl(tab.url);
+    double zoom_level = 0.0;
+    if (tab.browser) {
+        zoom_level = tab.browser->GetHost()->GetZoomLevel();
+    }
     std::string tabs_json = "[";
     const auto& tabs = tabs_.Tabs();
     for (size_t i = 0; i < tabs.size(); ++i) {
@@ -615,6 +659,7 @@ void NebulaController::SendChromeState(const nebula::browser::NebulaTab& tab) {
         ",\"canGoBack\":" + std::string(tab.CanGoBack() ? "true" : "false") +
         ",\"canGoForward\":" + std::string(tab.CanGoForward() ? "true" : "false") +
         ",\"favicon\":\"" + nebula::browser::JsonEscape(tab.favicon_url) + "\"" +
+        ",\"zoomLevel\":" + std::to_string(zoom_level) +
         ",\"tabs\":" + tabs_json +
         "});";
 
@@ -665,6 +710,25 @@ void NebulaController::MaybeFinishShutdown() {
         nebula::platform::DestroyTopLevelWindow(window_->native_handle());
     }
     CefQuitMessageLoop();
+}
+
+bool NebulaController::ForgetClosingTabBrowser(CefRefPtr<CefBrowser> browser) {
+    if (!browser) {
+        return false;
+    }
+
+    const auto it = std::find_if(
+        closing_tab_browsers_.begin(),
+        closing_tab_browsers_.end(),
+        [browser](const CefRefPtr<CefBrowser>& closing_browser) {
+            return closing_browser && closing_browser->IsSame(browser);
+        });
+    if (it == closing_tab_browsers_.end()) {
+        return false;
+    }
+
+    closing_tab_browsers_.erase(it);
+    return true;
 }
 
 }  // namespace nebula::app

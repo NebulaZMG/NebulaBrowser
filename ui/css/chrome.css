@@ -59,9 +59,10 @@ button:disabled {
 
 .nebula-chrome {
   display: grid;
-  grid-template-rows: 42px 52px;
+  grid-template-rows: 42px 52px 1fr;
   height: 100%;
   border-bottom: 1px solid var(--outline);
+  overflow: visible;
 }
 
 /* ── Title row ──────────────────────────────────────────────── */
@@ -253,6 +254,7 @@ button:disabled {
   padding: 0 12px;
   background: var(--surface-raised);
   border-top: 1px solid var(--outline);
+  overflow: visible;
 }
 
 /* ── Lucide icon sizing ─────────────────────────────────────── */
@@ -361,3 +363,4 @@ button:disabled {
     transform: rotate(360deg);
   }
 }
+

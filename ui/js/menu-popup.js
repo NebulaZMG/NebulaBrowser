@@ -18,37 +18,29 @@ function applyTheme(theme) {
 }
 
 function sendMenuCommand(cmd) {
-  if (window.electronAPI?.send) {
-    window.electronAPI.send('menu-popup-command', { cmd });
-    return;
-  }
-
   if (window.nebulaNative?.postMessage) {
     window.nebulaNative.postMessage(cmd);
   }
 }
 
-async function refreshZoom() {
-  if (!window.electronAPI?.invoke || !zoomPercentEl) return;
-  try {
-    const z = await window.electronAPI.invoke('get-zoom-factor');
-    zoomPercentEl.textContent = `${Math.round(z * 100)}%`;
-  } catch {}
+function formatZoomPercent(zoomLevel) {
+  const level = Number.isFinite(zoomLevel) ? zoomLevel : 0;
+  return `${Math.round(Math.pow(1.2, level) * 100)}%`;
 }
 
-window.electronAPI?.on?.('menu-popup-init', (payload) => {
-  applyTheme(payload?.theme);
-  refreshZoom();
-});
+function setZoomLevel(zoomLevel) {
+  if (zoomPercentEl) {
+    zoomPercentEl.textContent = formatZoomPercent(zoomLevel);
+  }
+}
+
+window.NebulaMenuPopup = { applyTheme, setZoomLevel };
 
 window.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-cmd]');
   if (!btn) return;
   const cmd = btn.getAttribute('data-cmd');
   sendMenuCommand(cmd);
-  if (cmd === 'zoom-in' || cmd === 'zoom-out') {
-    setTimeout(refreshZoom, 50);
-  }
 });
 
 window.addEventListener('keydown', (e) => {
@@ -57,4 +49,4 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-refreshZoom();
+setZoomLevel(0);

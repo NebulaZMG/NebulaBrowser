@@ -773,7 +773,9 @@ window.addEventListener('DOMContentLoaded', () => {
       try {
         e.preventDefault();
         const url = gh.getAttribute('href');
-        if (window.electronAPI && typeof window.electronAPI.sendToHost === 'function') {
+        if (window.nebulaNative && typeof window.nebulaNative.postMessage === 'function') {
+          window.nebulaNative.postMessage('new-tab', url);
+        } else if (window.electronAPI && typeof window.electronAPI.sendToHost === 'function') {
           window.electronAPI.sendToHost('navigate', url, { newTab: true });
         } else if (window.parent && window.parent !== window) {
           window.parent.postMessage({ type: 'navigate', url, newTab: true }, '*');
@@ -792,7 +794,9 @@ window.addEventListener('DOMContentLoaded', () => {
       try {
         e.preventDefault();
         const url = help.getAttribute('href');
-        if (window.electronAPI && typeof window.electronAPI.sendToHost === 'function') {
+        if (window.nebulaNative && typeof window.nebulaNative.postMessage === 'function') {
+          window.nebulaNative.postMessage('new-tab', url);
+        } else if (window.electronAPI && typeof window.electronAPI.sendToHost === 'function') {
           window.electronAPI.sendToHost('navigate', url, { newTab: true });
         } else if (window.parent && window.parent !== window) {
           window.parent.postMessage({ type: 'navigate', url, newTab: true }, '*');

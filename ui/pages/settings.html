@@ -489,8 +489,10 @@
             a.addEventListener('click', (e) => {
               e.preventDefault();
               try {
-                if (window.electronAPI && typeof window.electronAPI.sendToHost === 'function') {
-                  // Ask the host to open this URL in a new tab to keep Settings open
+                if (window.nebulaNative && typeof window.nebulaNative.postMessage === 'function') {
+                  // Ask the CEF host to open this URL in a new tab to keep Settings open.
+                  window.nebulaNative.postMessage('new-tab', item);
+                } else if (window.electronAPI && typeof window.electronAPI.sendToHost === 'function') {
                   window.electronAPI.sendToHost('navigate', item, { newTab: true });
                 } else if (window.parent && window.parent !== window) {
                   // Fallback: postMessage to parent if available

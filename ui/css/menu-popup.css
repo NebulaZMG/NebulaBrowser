@@ -1,34 +1,40 @@
 :root {
-  --bg: #0b0d10;
-  --primary: #7b2eff;
-  --accent: #00c6ff;
-  --text: #e0e0e0;
-  --url-bar-bg: #1c2030;
-  --url-bar-border: #3e4652;
-  --shadow-1: 0 12px 30px rgba(0, 0, 0, 0.35);
-  --blur: 12px;
+  --surface-raised: #141824;
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --text: #e8e8f0;
+  --muted: #7a7e90;
+  --outline: #1f2533;
+  color-scheme: dark;
+}
+
+@font-face {
+  font-family: "InterVariable";
+  src: url("../assets/fonts/InterVariable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: swap;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: transparent;
+  background: var(--surface-raised);
   color: var(--text);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family: "InterVariable", "Segoe UI", system-ui, sans-serif;
+  overflow: hidden;
+  user-select: none;
 }
 
 #menu-popup {
-  background: color-mix(in srgb, var(--url-bar-bg) 92%, var(--text) 8%);
-  border: 1px solid color-mix(in srgb, var(--primary) 25%, color-mix(in srgb, var(--accent) 18%, transparent));
-  border-radius: 14px;
-  padding: 8px;
+  width: 100%;
+  height: 100%;
+  background: var(--surface-raised);
+  border: 1px solid var(--outline);
+  border-radius: 12px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  min-width: 220px;
-  box-shadow: var(--shadow-1);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
 #menu-popup button {
@@ -37,13 +43,15 @@ body {
   color: var(--text);
   text-align: left;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: background 120ms ease, filter 120ms ease;
+  font: inherit;
+  font-size: 0.84rem;
+  transition: background 120ms ease;
 }
 
 #menu-popup button:hover {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
+  background: var(--surface-hover);
 }
 
 .zoom-controls {
@@ -63,4 +71,6 @@ body {
 #zoom-percent {
   min-width: 54px;
   text-align: center;
+  color: var(--muted);
+  font-size: 0.82rem;
 }

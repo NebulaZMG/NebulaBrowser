@@ -95,40 +95,20 @@ std::pair<int, int> ParentClientSize(NativeWindow parent) {
 }
 
 Rect MenuPopupRect(NativeWindow parent, const BrowserLayout& layout) {
-    const auto [client_right, client_bottom] = ParentClientSize(parent);
-
+    const auto client_size = ParentClientSize(parent);
     const int width = ScaleForParentWindow(parent, 260);
     const int height = ScaleForParentWindow(parent, 258);
     const int margin = ScaleForParentWindow(parent, 12);
     const int overlap = ScaleForParentWindow(parent, 2);
 
-    const int x = std::max(0, client_right - width - margin);
+    const int x = std::max(0, client_size.first - width - margin);
     const int y = std::max(0, layout.chrome.y + layout.chrome.height - overlap);
     return {
         x,
         y,
-        std::min(client_right, x + width) - x,
-        std::min(client_bottom, y + height) - y,
+        std::min(client_size.first, x + width) - x,
+        std::min(client_size.second, y + height) - y,
     };
-}
-
-void ApplyRoundedBrowserRegion(NativeWindow browser_window, int corner_radius) {
-    const HWND hwnd = AsHwnd(browser_window);
-    if (!hwnd) {
-        return;
-    }
-
-    RECT rect = {};
-    if (!GetClientRect(hwnd, &rect)) {
-        return;
-    }
-
-    const int width = std::max<LONG>(1, rect.right - rect.left);
-    const int height = std::max<LONG>(1, rect.bottom - rect.top);
-    HRGN region = CreateRoundRectRgn(0, 0, width + 1, height + 1, corner_radius, corner_radius);
-    if (region && !SetWindowRgn(hwnd, region, TRUE)) {
-        DeleteObject(region);
-    }
 }
 
 std::string CacheBusterToken() {

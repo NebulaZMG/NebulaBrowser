@@ -123,6 +123,7 @@ function applyState(nextState) {
 
   progressBar.style.width = `${Math.max(0, Math.min(1, state.progress || 0)) * 100}%`;
   progressBar.style.opacity = state.isLoading ? '1' : '0';
+
 }
 
 function wireCommands() {

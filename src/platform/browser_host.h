@@ -14,7 +14,6 @@ void ResizeBrowserWindow(NativeWindow browser_window, const Rect& rect);
 void SetBrowserVisible(NativeWindow browser_window, bool visible);
 void RaiseBrowserWindow(NativeWindow browser_window);
 Rect MenuPopupRect(NativeWindow parent, const BrowserLayout& layout);
-void ApplyRoundedBrowserRegion(NativeWindow browser_window, int corner_radius);
 std::string CacheBusterToken();
 void DestroyTopLevelWindow(NativeWindow window);
 int ScaleForParentWindow(NativeWindow parent, int value);
