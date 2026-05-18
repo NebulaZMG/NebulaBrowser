@@ -76,8 +76,15 @@ void NebulaApp::OnBeforeCommandLineProcessing(const CefString& process_type,
     // can prevent WebGL shared contexts from initializing on some drivers.
     command_line->AppendSwitch("ignore-gpu-blocklist");
     command_line->AppendSwitch("enable-accelerated-video-decode");
+
+#if defined(_WIN32)
     command_line->AppendSwitchWithValue("use-gl", "angle");
     command_line->AppendSwitchWithValue("use-angle", "d3d11");
+#elif defined(__APPLE__)
+    command_line->AppendSwitchWithValue("use-angle", "metal");
+#else
+    command_line->AppendSwitchWithValue("use-gl", "egl");
+#endif
 }
 
 void NebulaApp::OnContextCreated(CefRefPtr<CefBrowser> browser,

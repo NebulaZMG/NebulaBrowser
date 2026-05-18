@@ -1,7 +1,5 @@
 #include "app/nebula_controller.h"
 
-#include <windows.h>
-
 #include <algorithm>
 #include <charconv>
 #include <cctype>
@@ -15,25 +13,13 @@
 #include "include/cef_browser.h"
 #include "include/cef_cookie.h"
 #include "include/wrapper/cef_helpers.h"
+#include "platform/browser_host.h"
 #include "ui/paths.h"
 
 namespace nebula::app {
 namespace {
 
 constexpr size_t kMaxSiteHistoryEntries = 200;
-
-std::wstring Utf8ToWide(const std::string& value) {
-    if (value.empty()) {
-        return {};
-    }
-
-    const int size = MultiByteToWideChar(
-        CP_UTF8, 0, value.data(), static_cast<int>(value.size()), nullptr, 0);
-    std::wstring result(size, L'\0');
-    MultiByteToWideChar(
-        CP_UTF8, 0, value.data(), static_cast<int>(value.size()), result.data(), size);
-    return result;
-}
 
 std::filesystem::path GetSiteHistoryPath() {
     const auto user_data = nebula::ui::GetUserDataDirectory();
@@ -96,22 +82,6 @@ std::string SiteHistoryJson(const std::vector<std::string>& history) {
     return json;
 }
 
-CefWindowInfo ChildWindowInfo(HWND parent, const RECT& rect) {
-    CefWindowInfo info;
-    info.SetAsChild(
-        parent,
-        CefRect(
-            rect.left,
-            rect.top,
-            rect.right - rect.left,
-            rect.bottom - rect.top));
-    // CEF defaults to the Chrome runtime style, which ignores the
-    // SetAsChild hint and creates a top-level window per browser. Force the
-    // Alloy runtime style so each browser embeds inside the Nebula HWND.
-    info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
-    return info;
-}
-
 CefBrowserSettings BrowserSettings() {
     CefBrowserSettings settings;
     settings.webgl = STATE_ENABLED;
@@ -122,47 +92,6 @@ int ParseTabId(const std::string& value) {
     int tab_id = 0;
     const auto result = std::from_chars(value.data(), value.data() + value.size(), tab_id);
     return result.ec == std::errc{} && result.ptr == value.data() + value.size() ? tab_id : 0;
-}
-
-int ScaleForWindow(HWND hwnd, int value) {
-    return MulDiv(value, static_cast<int>(GetDpiForWindow(hwnd)), 96);
-}
-
-RECT MenuPopupRect(HWND hwnd, const nebula::window::BrowserLayout& layout) {
-    RECT client = {};
-    GetClientRect(hwnd, &client);
-
-    const int width = ScaleForWindow(hwnd, 260);
-    const int height = ScaleForWindow(hwnd, 258);
-    const int margin = ScaleForWindow(hwnd, 12);
-    const int overlap = ScaleForWindow(hwnd, 2);
-
-    const LONG x = std::max<LONG>(margin, client.right - width - margin);
-    const LONG y = std::max<LONG>(0, layout.chrome.bottom - overlap);
-    return {
-        x,
-        y,
-        std::min<LONG>(client.right, x + width),
-        std::min<LONG>(client.bottom, y + height),
-    };
-}
-
-void ApplyRoundedWindowRegion(HWND hwnd, int corner_radius) {
-    RECT rect = {};
-    if (!hwnd || !GetClientRect(hwnd, &rect)) {
-        return;
-    }
-
-    HRGN region = CreateRoundRectRgn(
-        0,
-        0,
-        std::max<LONG>(1, rect.right - rect.left) + 1,
-        std::max<LONG>(1, rect.bottom - rect.top) + 1,
-        corner_radius,
-        corner_radius);
-    if (region && !SetWindowRgn(hwnd, region, TRUE)) {
-        DeleteObject(region);
-    }
 }
 
 std::string WithCacheBuster(std::string url) {
@@ -178,7 +107,7 @@ std::string WithCacheBuster(std::string url) {
     }
 
     const char separator = url.find('?') == std::string::npos ? '?' : '&';
-    return url + separator + "nebula_cache_bust=" + std::to_string(GetTickCount64()) + fragment;
+    return url + separator + "nebula_cache_bust=" + nebula::platform::CacheBusterToken() + fragment;
 }
 
 std::string GetChromeDisplayUrl(const std::string& url) {
@@ -190,23 +119,14 @@ void SetBrowserVisible(CefRefPtr<CefBrowser> browser, bool visible) {
         return;
     }
 
-    const HWND hwnd = browser->GetHost()->GetWindowHandle();
-    if (!hwnd) {
-        return;
-    }
-
-    ShowWindow(hwnd, visible ? SW_SHOW : SW_HIDE);
-    if (visible) {
-        SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    }
+    nebula::platform::SetBrowserVisible(browser->GetHost()->GetWindowHandle(), visible);
 }
 
 }  // namespace
 
-NebulaController::NebulaController(HINSTANCE instance, std::string initial_url, int show_command)
-    : instance_(instance),
+NebulaController::NebulaController(nebula::platform::AppStartup startup, std::string initial_url)
+    : startup_(startup),
       initial_url_(std::move(initial_url)),
-      show_command_(show_command),
       tabs_(this),
       site_history_(LoadSiteHistory()) {}
 
@@ -214,7 +134,7 @@ NebulaController::~NebulaController() = default;
 
 bool NebulaController::Create() {
     window_ = std::make_unique<nebula::window::NebulaWindow>(this);
-    return window_->Create(instance_, show_command_);
+    return window_->Create(startup_);
 }
 
 void NebulaController::OnWindowCreated() {
@@ -240,8 +160,8 @@ void NebulaController::OnWindowCloseRequested() {
         // child browser finishes its JS unload + DoClose phase. Destroy the
         // Nebula window now so CEF can tear down the child browser HWNDs and
         // fire OnBeforeClose; MaybeFinishShutdown will then quit the loop.
-        if (window_ && window_->hwnd()) {
-            DestroyWindow(window_->hwnd());
+        if (window_ && window_->native_handle()) {
+            nebula::platform::DestroyTopLevelWindow(window_->native_handle());
         }
         MaybeFinishShutdown();
         return;
@@ -398,7 +318,7 @@ void NebulaController::OnContentTitleChanged(CefRefPtr<CefBrowser> browser, cons
     PersistSession();
     const auto* active_tab = tabs_.ActiveTab();
     if (window_ && active_tab && active_tab->browser && active_tab->browser->IsSame(browser)) {
-        window_->SetTitle(Utf8ToWide(title.empty() ? "Nebula Browser" : title + " - Nebula"));
+        window_->SetTitle(title.empty() ? "Nebula Browser" : title + " - Nebula");
     }
 }
 
@@ -514,20 +434,21 @@ void NebulaController::CloseTab(int tab_id) {
 }
 
 void NebulaController::CreateChromeBrowser() {
-    if (!window_ || !window_->hwnd()) {
+    if (!window_ || !window_->native_handle()) {
         return;
     }
 
     const auto layout = window_->CurrentLayout();
     CefBrowserSettings browser_settings = BrowserSettings();
     chrome_client_ = new nebula::cef::NebulaBrowserClient(nebula::cef::BrowserRole::Chrome, this);
-    CefWindowInfo window_info = ChildWindowInfo(window_->hwnd(), layout.chrome);
+    CefWindowInfo window_info =
+        nebula::platform::MakeChildWindowInfo(window_->native_handle(), layout.chrome);
     CefBrowserHost::CreateBrowser(
         window_info, chrome_client_, nebula::ui::GetChromeUrl(), browser_settings, nullptr, nullptr);
 }
 
 void NebulaController::CreateContentBrowser() {
-    if (!window_ || !window_->hwnd()) {
+    if (!window_ || !window_->native_handle()) {
         return;
     }
 
@@ -536,7 +457,8 @@ void NebulaController::CreateContentBrowser() {
     const auto layout = window_->CurrentLayout();
     CefBrowserSettings browser_settings = BrowserSettings();
     content_client_ = new nebula::cef::NebulaBrowserClient(nebula::cef::BrowserRole::Content, this);
-    CefWindowInfo window_info = ChildWindowInfo(window_->hwnd(), layout.content);
+    CefWindowInfo window_info =
+        nebula::platform::MakeChildWindowInfo(window_->native_handle(), layout.content);
     CefBrowserHost::CreateBrowser(
         window_info, content_client_, nebula::ui::ResolveInternalUrl(url), browser_settings, nullptr, nullptr);
 }
@@ -557,33 +479,38 @@ void NebulaController::CloseMenuPopup() {
 }
 
 void NebulaController::CreateMenuPopupBrowser() {
-    if (!window_ || !window_->hwnd()) {
+    if (!window_ || !window_->native_handle()) {
         return;
     }
 
     const auto layout = window_->CurrentLayout();
     CefBrowserSettings browser_settings = BrowserSettings();
     menu_popup_client_ = new nebula::cef::NebulaBrowserClient(nebula::cef::BrowserRole::MenuPopup, this);
-    CefWindowInfo window_info = ChildWindowInfo(window_->hwnd(), MenuPopupRect(window_->hwnd(), layout));
+    CefWindowInfo window_info = nebula::platform::MakeChildWindowInfo(
+        window_->native_handle(),
+        nebula::platform::MenuPopupRect(window_->native_handle(), layout));
     CefBrowserHost::CreateBrowser(
         window_info, menu_popup_client_, nebula::ui::GetMenuPopupUrl(), browser_settings, nullptr, nullptr);
 }
 
 void NebulaController::PositionMenuPopup() {
-    if (content_fullscreen_ || !window_ || !window_->hwnd() || !menu_popup_browser_) {
+    if (content_fullscreen_ || !window_ || !window_->native_handle() || !menu_popup_browser_) {
         return;
     }
 
-    const auto rect = MenuPopupRect(window_->hwnd(), window_->CurrentLayout());
-    const HWND hwnd = menu_popup_browser_->GetHost()->GetWindowHandle();
-    window_->ResizeChild(hwnd, rect);
-    ApplyRoundedWindowRegion(hwnd, ScaleForWindow(window_->hwnd(), 28));
-    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    const auto rect =
+        nebula::platform::MenuPopupRect(window_->native_handle(), window_->CurrentLayout());
+    const auto browser_window = menu_popup_browser_->GetHost()->GetWindowHandle();
+    window_->ResizeChild(browser_window, rect);
+    nebula::platform::ApplyRoundedBrowserRegion(
+        browser_window,
+        nebula::platform::ScaleForParentWindow(window_->native_handle(), 28));
+    nebula::platform::RaiseBrowserWindow(browser_window);
 }
 
 void NebulaController::ToggleDevTools() {
     auto* tab = tabs_.ActiveTab();
-    if (!tab || !tab->browser || !window_ || !window_->hwnd()) {
+    if (!tab || !tab->browser || !window_ || !window_->native_handle()) {
         return;
     }
 
@@ -593,9 +520,8 @@ void NebulaController::ToggleDevTools() {
         return;
     }
 
-    CefWindowInfo window_info;
-    window_info.SetAsPopup(window_->hwnd(), "Nebula Developer Tools");
-    window_info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
+    CefWindowInfo window_info =
+        nebula::platform::MakeDevToolsPopup(window_->native_handle(), "Nebula Developer Tools");
     CefBrowserSettings browser_settings;
     host->ShowDevTools(window_info, content_client_, browser_settings, CefPoint());
 }
@@ -643,10 +569,14 @@ void NebulaController::ResizeBrowsers() {
 
     const auto layout = window_->CurrentLayout(!content_fullscreen_);
     if (chrome_browser_) {
-        window_->ResizeChild(chrome_browser_->GetHost()->GetWindowHandle(), layout.chrome);
+        window_->ResizeChild(
+            chrome_browser_->GetHost()->GetWindowHandle(),
+            layout.chrome);
     }
     if (const auto* tab = tabs_.ActiveTab(); tab && tab->browser) {
-        window_->ResizeChild(tab->browser->GetHost()->GetWindowHandle(), layout.content);
+        window_->ResizeChild(
+            tab->browser->GetHost()->GetWindowHandle(),
+            layout.content);
     }
     if (!content_fullscreen_) {
         PositionMenuPopup();
@@ -731,8 +661,8 @@ void NebulaController::MaybeFinishShutdown() {
         return;
     }
 
-    if (window_ && window_->hwnd()) {
-        DestroyWindow(window_->hwnd());
+    if (window_ && window_->native_handle()) {
+        nebula::platform::DestroyTopLevelWindow(window_->native_handle());
     }
     CefQuitMessageLoop();
 }

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <windows.h>
+#include "platform/types.h"
 
 namespace nebula::app {
 
-int RunNebula(HINSTANCE instance, int show_command);
+int RunNebula(const nebula::platform::AppStartup& startup);
 
 }  // namespace nebula::app

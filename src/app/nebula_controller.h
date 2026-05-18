@@ -7,6 +7,7 @@
 
 #include "browser/tab_manager.h"
 #include "cef/browser_client.h"
+#include "platform/types.h"
 #include "window/nebula_window.h"
 
 namespace nebula::app {
@@ -15,7 +16,7 @@ class NebulaController final : public nebula::window::WindowDelegate,
                               public nebula::browser::TabObserver,
                               public nebula::cef::BrowserClientDelegate {
 public:
-    NebulaController(HINSTANCE instance, std::string initial_url, int show_command);
+    NebulaController(nebula::platform::AppStartup startup, std::string initial_url);
     ~NebulaController() override;
 
     bool Create();
@@ -60,9 +61,8 @@ private:
     void PersistSession() const;
     void MaybeFinishShutdown();
 
-    HINSTANCE instance_ = nullptr;
+    nebula::platform::AppStartup startup_;
     std::string initial_url_;
-    int show_command_ = SW_SHOWDEFAULT;
     bool closing_ = false;
     bool chrome_ready_ = false;
     bool content_fullscreen_ = false;
