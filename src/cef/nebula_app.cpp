@@ -16,8 +16,8 @@ public:
                  const CefV8ValueList& arguments,
                  CefRefPtr<CefV8Value>& retval,
                  CefString& exception) override {
-        UNREFERENCED_PARAMETER(object);
-        UNREFERENCED_PARAMETER(retval);
+        NEBULA_UNUSED(object);
+        NEBULA_UNUSED(retval);
 
         if (name != "postMessage" && name != "sendToHost" && name != "send") {
             return false;
@@ -55,7 +55,7 @@ private:
 
 void NebulaApp::OnBeforeCommandLineProcessing(const CefString& process_type,
                                               CefRefPtr<CefCommandLine> command_line) {
-    UNREFERENCED_PARAMETER(process_type);
+    NEBULA_UNUSED(process_type);
 
     // The bundled UI is loaded from file:// and uses ES modules.
     command_line->AppendSwitch("allow-file-access-from-files");
@@ -92,8 +92,8 @@ void NebulaApp::OnContextCreated(CefRefPtr<CefBrowser> browser,
                                  CefRefPtr<CefFrame> frame,
                                  CefRefPtr<CefV8Context> context) {
     CEF_REQUIRE_RENDERER_THREAD();
-    UNREFERENCED_PARAMETER(browser);
-    UNREFERENCED_PARAMETER(frame);
+    NEBULA_UNUSED(browser);
+    NEBULA_UNUSED(frame);
 
     CefRefPtr<CefV8Value> global = context->GetGlobal();
     CefRefPtr<NativeBridgeHandler> handler = new NativeBridgeHandler();

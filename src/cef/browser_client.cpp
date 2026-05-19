@@ -82,8 +82,8 @@ bool NebulaBrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser
                                                    CefProcessId source_process,
                                                    CefRefPtr<CefProcessMessage> message) {
     CEF_REQUIRE_UI_THREAD();
-    UNREFERENCED_PARAMETER(browser);
-    UNREFERENCED_PARAMETER(source_process);
+    NEBULA_UNUSED(browser);
+    NEBULA_UNUSED(source_process);
 
     if (!message || message->GetName().ToString() != kChromeCommandMessage) {
         return false;
@@ -162,7 +162,7 @@ bool NebulaBrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
                                         CefEventHandle os_event,
                                         bool* is_keyboard_shortcut) {
     CEF_REQUIRE_UI_THREAD();
-    UNREFERENCED_PARAMETER(os_event);
+    NEBULA_UNUSED(os_event);
 
     if (role_ == BrowserRole::Content &&
         event.type == KEYEVENT_RAWKEYDOWN &&
@@ -194,17 +194,17 @@ bool NebulaBrowserClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
                                         CefRefPtr<CefDictionaryValue>& extra_info,
                                         bool* no_javascript_access) {
     CEF_REQUIRE_UI_THREAD();
-    UNREFERENCED_PARAMETER(frame);
-    UNREFERENCED_PARAMETER(popup_id);
-    UNREFERENCED_PARAMETER(target_frame_name);
-    UNREFERENCED_PARAMETER(target_disposition);
-    UNREFERENCED_PARAMETER(user_gesture);
-    UNREFERENCED_PARAMETER(popupFeatures);
-    UNREFERENCED_PARAMETER(windowInfo);
-    UNREFERENCED_PARAMETER(client);
-    UNREFERENCED_PARAMETER(settings);
-    UNREFERENCED_PARAMETER(extra_info);
-    UNREFERENCED_PARAMETER(no_javascript_access);
+    NEBULA_UNUSED(frame);
+    NEBULA_UNUSED(popup_id);
+    NEBULA_UNUSED(target_frame_name);
+    NEBULA_UNUSED(target_disposition);
+    NEBULA_UNUSED(user_gesture);
+    NEBULA_UNUSED(popupFeatures);
+    NEBULA_UNUSED(windowInfo);
+    NEBULA_UNUSED(client);
+    NEBULA_UNUSED(settings);
+    NEBULA_UNUSED(extra_info);
+    NEBULA_UNUSED(no_javascript_access);
 
     if (role_ == BrowserRole::Content && delegate_) {
         delegate_->OnPopupRequested(browser, target_url.ToString());
@@ -233,8 +233,8 @@ void NebulaBrowserClient::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
                                                bool canGoBack,
                                                bool canGoForward) {
     CEF_REQUIRE_UI_THREAD();
-    UNREFERENCED_PARAMETER(canGoBack);
-    UNREFERENCED_PARAMETER(canGoForward);
+    NEBULA_UNUSED(canGoBack);
+    NEBULA_UNUSED(canGoForward);
 
     if (role_ == BrowserRole::Content && delegate_) {
         delegate_->OnContentLoadingStateChanged(browser, isLoading);
@@ -245,7 +245,7 @@ void NebulaBrowserClient::OnLoadStart(CefRefPtr<CefBrowser> browser,
                                       CefRefPtr<CefFrame> frame,
                                       TransitionType transition_type) {
     CEF_REQUIRE_UI_THREAD();
-    UNREFERENCED_PARAMETER(transition_type);
+    NEBULA_UNUSED(transition_type);
 
     if (role_ == BrowserRole::Content && delegate_ && frame && frame->IsMain()) {
         delegate_->OnContentLoadProgressChanged(browser, 0.12);
@@ -275,9 +275,9 @@ bool NebulaBrowserClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
                                          bool user_gesture,
                                          bool is_redirect) {
     CEF_REQUIRE_UI_THREAD();
-    UNREFERENCED_PARAMETER(browser);
-    UNREFERENCED_PARAMETER(user_gesture);
-    UNREFERENCED_PARAMETER(is_redirect);
+    NEBULA_UNUSED(browser);
+    NEBULA_UNUSED(user_gesture);
+    NEBULA_UNUSED(is_redirect);
 
     if (role_ == BrowserRole::Content && frame && frame->IsMain() && request) {
         const std::string url = request->GetURL().ToString();
@@ -309,8 +309,8 @@ bool NebulaBrowserClient::OnShowPermissionPrompt(
     uint32_t requested_permissions,
     CefRefPtr<CefPermissionPromptCallback> callback) {
     CEF_REQUIRE_UI_THREAD();
-    UNREFERENCED_PARAMETER(prompt_id);
-    UNREFERENCED_PARAMETER(requesting_origin);
+    NEBULA_UNUSED(prompt_id);
+    NEBULA_UNUSED(requesting_origin);
 
     if (role_ == BrowserRole::Content &&
         (requested_permissions & CEF_PERMISSION_TYPE_GEOLOCATION) != 0 &&

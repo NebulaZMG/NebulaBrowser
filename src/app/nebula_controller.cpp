@@ -252,11 +252,8 @@ void NebulaController::OnWindowCloseRequested() {
     }
 
     // Do not wait for CEF to re-send WM_CLOSE to the host window. On some
-    // Alloy child-window paths that message never arrives, leaving the app
-    // alive with all close affordances disabled until the process is killed.
-    if (window_ && window_->native_handle()) {
-        nebula::platform::DestroyTopLevelWindow(window_->native_handle());
-    }
+    // Alloy child-window paths that message never arrives, so the controller
+    // finishes shutdown once every CEF browser has reported OnBeforeClose.
     MaybeFinishShutdown();
 }
 

@@ -44,7 +44,7 @@ CefMainArgs MakeMainArgs(const AppStartup& startup) {
 }
 
 void InitCommandLine(CefRefPtr<CefCommandLine> command_line, const AppStartup& startup) {
-    UNREFERENCED_PARAMETER(startup);
+    NEBULA_UNUSED(startup);
     command_line->InitFromString(::GetCommandLineW());
 }
 

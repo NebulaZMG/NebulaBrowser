@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef UNREFERENCED_PARAMETER
-#define UNREFERENCED_PARAMETER(P) (void)(P)
+#ifndef NEBULA_UNUSED
+#define NEBULA_UNUSED(P) (void)(P)
 #endif
 
 namespace nebula::platform {

@@ -16,7 +16,7 @@ NebulaWindow::NebulaWindow(WindowDelegate* delegate)
 NebulaWindow::~NebulaWindow() = default;
 
 bool NebulaWindow::Create(const platform::AppStartup& startup) {
-    UNREFERENCED_PARAMETER(startup);
+    NEBULA_UNUSED(startup);
     return false;
 }
 
@@ -25,21 +25,21 @@ platform::NativeWindow NebulaWindow::native_handle() const {
 }
 
 BrowserLayout NebulaWindow::CurrentLayout(bool show_chrome) const {
-    UNREFERENCED_PARAMETER(show_chrome);
+    NEBULA_UNUSED(show_chrome);
     return {};
 }
 
 void NebulaWindow::ResizeChild(platform::NativeWindow child, const platform::Rect& rect) const {
-    UNREFERENCED_PARAMETER(child);
-    UNREFERENCED_PARAMETER(rect);
+    NEBULA_UNUSED(child);
+    NEBULA_UNUSED(rect);
 }
 
 void NebulaWindow::Minimize() {}
 void NebulaWindow::ToggleMaximize() {}
-void NebulaWindow::SetFullscreen(bool fullscreen) { UNREFERENCED_PARAMETER(fullscreen); }
+void NebulaWindow::SetFullscreen(bool fullscreen) { NEBULA_UNUSED(fullscreen); }
 void NebulaWindow::Close() {}
 void NebulaWindow::BeginDrag() {}
-void NebulaWindow::SetTitle(const std::string& title) { UNREFERENCED_PARAMETER(title); }
-void NebulaWindow::EnableFrameHitTest(platform::NativeWindow child) const { UNREFERENCED_PARAMETER(child); }
+void NebulaWindow::SetTitle(const std::string& title) { NEBULA_UNUSED(title); }
+void NebulaWindow::EnableFrameHitTest(platform::NativeWindow child) const { NEBULA_UNUSED(child); }
 
 }  // namespace nebula::window

@@ -21,32 +21,32 @@ CefWindowInfo MakeDevToolsPopup(NativeWindow parent, const char* title) {
 }
 
 void ResizeBrowserWindow(NativeWindow browser_window, const Rect& rect) {
-    UNREFERENCED_PARAMETER(browser_window);
-    UNREFERENCED_PARAMETER(rect);
+    NEBULA_UNUSED(browser_window);
+    NEBULA_UNUSED(rect);
 }
 
 void SetBrowserVisible(NativeWindow browser_window, bool visible) {
-    UNREFERENCED_PARAMETER(browser_window);
-    UNREFERENCED_PARAMETER(visible);
+    NEBULA_UNUSED(browser_window);
+    NEBULA_UNUSED(visible);
 }
 
 void RaiseBrowserWindow(NativeWindow browser_window) {
-    UNREFERENCED_PARAMETER(browser_window);
+    NEBULA_UNUSED(browser_window);
 }
 
 void MoveCursorToBrowserPoint(NativeWindow browser_window, int x, int y) {
-    UNREFERENCED_PARAMETER(browser_window);
-    UNREFERENCED_PARAMETER(x);
-    UNREFERENCED_PARAMETER(y);
+    NEBULA_UNUSED(browser_window);
+    NEBULA_UNUSED(x);
+    NEBULA_UNUSED(y);
 }
 
 int ScaleForParentWindow(NativeWindow parent, int value) {
-    UNREFERENCED_PARAMETER(parent);
+    NEBULA_UNUSED(parent);
     return value;
 }
 
 std::pair<int, int> ParentClientSize(NativeWindow parent) {
-    UNREFERENCED_PARAMETER(parent);
+    NEBULA_UNUSED(parent);
     return {1280, 720};
 }
 
@@ -71,7 +71,7 @@ std::string CacheBusterToken() {
 }
 
 void DestroyTopLevelWindow(NativeWindow window) {
-    UNREFERENCED_PARAMETER(window);
+    NEBULA_UNUSED(window);
 }
 
 }  // namespace nebula::platform
