@@ -18,3 +18,4 @@ CMakeFiles/
 
 # Logs
 *.log
+/.cache

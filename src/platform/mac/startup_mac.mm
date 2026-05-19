@@ -1,5 +1,7 @@
 #include "platform/startup.h"
 
+#import <Cocoa/Cocoa.h>
+
 #include <fcntl.h>
 #include <filesystem>
 #include <system_error>
@@ -16,7 +18,13 @@ int g_single_instance_lock = -1;
 
 }  // namespace
 
-void PrepareApp() {}
+void PrepareApp() {
+    @autoreleasepool {
+        [NSApplication sharedApplication];
+        [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+        [NSApp finishLaunching];
+    }
+}
 
 bool TryAcquireSingleInstance() {
     const auto lock_path = nebula::ui::GetUserDataDirectory() / ".nebula_instance.lock";

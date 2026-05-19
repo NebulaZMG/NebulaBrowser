@@ -1,6 +1,7 @@
 #include "cef/nebula_app.h"
 
 #include "include/cef_process_message.h"
+#include "platform/types.h"
 #include "include/wrapper/cef_helpers.h"
 
 namespace nebula::cef {

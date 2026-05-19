@@ -1,6 +1,7 @@
 #include "cef/browser_client.h"
 
 #include "include/cef_request.h"
+#include "platform/types.h"
 #include "include/wrapper/cef_helpers.h"
 #include "ui/paths.h"
 

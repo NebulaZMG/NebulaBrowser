@@ -211,7 +211,7 @@ void NebulaController::OnWindowCreated() {
 }
 
 void NebulaController::OnWindowResized(const nebula::window::BrowserLayout& layout) {
-    UNREFERENCED_PARAMETER(layout);
+    (void)layout;
     ResizeBrowsers();
 }
 

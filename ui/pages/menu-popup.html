@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nebula Menu</title>
+  <link rel="stylesheet" href="../css/menu-popup.css">
+</head>
+<body>
+  <main id="menu-popup" role="menu" aria-label="Nebula browser menu">
+    <button type="button" role="menuitem" data-cmd="open-settings">Settings</button>
+    <button type="button" role="menuitem" data-cmd="gpu-diagnostics">GPU diagnostics</button>
+    <button type="button" role="menuitem" data-cmd="big-picture">Big Picture mode</button>
+    <button type="button" role="menuitem" data-cmd="toggle-devtools">Developer tools</button>
+
+    <div class="zoom-controls" aria-label="Page zoom">
+      <button type="button" data-cmd="zoom-out" aria-label="Zoom out">-</button>
+      <span id="zoom-percent">100%</span>
+      <button type="button" data-cmd="zoom-in" aria-label="Zoom in">+</button>
+    </div>
+
+    <button type="button" role="menuitem" data-cmd="hard-reload">Hard reload</button>
+    <button type="button" role="menuitem" data-cmd="fresh-reload">Fresh reload</button>
+  </main>
+
+  <script src="../js/menu-popup.js"></script>
+</body>
+</html>

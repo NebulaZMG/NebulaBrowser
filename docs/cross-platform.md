@@ -15,7 +15,9 @@ Nebula Browser uses a **single codebase** and **one git branch** for Windows, ma
 
 **Windows** has a full native shell (custom frame, DWM, embedded CEF views).
 
-**macOS and Linux** compile and link today, but `NebulaWindow::Create()` is still a stub that returns `false` until a real Cocoa / X11 (or GTK) host is implemented.
+**macOS** has a Cocoa native shell (`NSWindow` / `NSView`) with CEF child-view embedding.
+
+**Linux** compiles and links today, but `NebulaWindow::Create()` is still a stub that returns `false` until a real X11 (or GTK) host is implemented.
 
 ## Directory layout
 
@@ -29,7 +31,7 @@ src/platform/
   paths_platform.h       # ExecutableDirectory, DefaultUserDataRoot, PathToUtf8
 
   win/                   # Windows implementation
-  mac/                   # macOS stubs + partial CEF glue
+  mac/                   # macOS Cocoa implementation
   linux/                 # Linux stubs + partial CEF glue
 
 src/window/
@@ -64,6 +66,22 @@ ui/                      # HTML/JS UI (copied next to the binary at build time)
 
 `thirdparty/cef/` is listed in `.gitignore` so binaries are never committed. Each developer and CI machine supplies its own copy.
 
+## IDE / clangd setup
+
+Without CEF headers, clangd will show many errors (unknown types like `CefWindowInfo`, `CefMainArgs`, etc.). To get full IDE support:
+
+1. Unpack CEF into `thirdparty/cef/` as described above
+2. Generate `compile_commands.json`:
+   ```bash
+   cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+   ```
+3. Symlink it to the project root:
+   ```bash
+   ln -s build/compile_commands.json .
+   ```
+
+The included `.clangd` file provides fallback flags, but full diagnostics require the compile database.
+
 Optional: override the location at configure time:
 
 ```bash
@@ -88,12 +106,9 @@ cmake -B build -DPROJECT_ARCH=x86_64   # or arm64 on Apple Silicon
 cmake --build build --config Release
 ```
 
-CMake builds a `NebulaBrowser.app` bundle and copies the Chromium Embedded Framework into `Contents/Frameworks`. A full macOS port still requires:
+CMake builds a `NebulaBrowser.app` bundle and copies the Chromium Embedded Framework into `Contents/Frameworks`. The macOS port includes a Cocoa `NSWindow` / `NSView` host and child-view embedding for CEF browsers.
 
-- A real `NebulaWindow` implementation (Cocoa `NSWindow` / `NSView`)
-- CEF **helper app** subprocess targets (see CEF’s `cefsimple` sample for the complete Mac bundle layout)
-
-Until that work lands, the macOS target may build but will exit early because `Create()` fails.
+CEF **helper app** subprocess targets may still need to be added if the selected CEF distribution does not provide a compatible default subprocess layout. Use CEF’s `cefsimple` sample as the reference for the complete Mac bundle layout.
 
 ### Linux
 
@@ -176,8 +191,10 @@ Platform-specific discovery lives in `src/platform/*/paths_*.cpp`.
 
 ## Porting checklist (macOS / Linux)
 
-- [ ] Implement `NebulaWindow` in `nebula_window_mac.cpp` / `nebula_window_linux.cpp`
-- [ ] Wire `browser_host_*.cpp` resize/show/raise to the real toolkit
+- [x] macOS: implement `NebulaWindow` in `nebula_window_mac.mm`
+- [x] macOS: wire `browser_host_mac.mm` resize/show/raise to Cocoa views
+- [ ] Linux: implement `NebulaWindow` in `nebula_window_linux.cpp`
+- [ ] Linux: wire `browser_host_linux.cpp` resize/show/raise to the real toolkit
 - [ ] macOS: add CEF helper app targets and bundle layout (copy from `cefsimple`)
 - [ ] Linux: confirm X11 (or chosen toolkit) parent handle for `CefWindowInfo::SetAsChild`
 - [ ] Test GPU diagnostics page and hardware acceleration on target hardware
@@ -191,8 +208,8 @@ No. Use one branch; swap `thirdparty/cef` and rebuild on each machine.
 **Can I commit CEF into the repo?**  
 Not recommended (size, licensing, per-arch binaries). Keeping `thirdparty/cef/` gitignored is intentional.
 
-**Why does macOS/Linux build but not run?**  
-The window stub intentionally returns `false` from `Create()` until a native shell exists. Shared CEF and browser code are ready; the missing piece is the host window.
+**Why does Linux build but not run?**
+The Linux window stub intentionally returns `false` from `Create()` until a native shell exists. Shared CEF and browser code are ready; the missing piece is the host window.
 
 **Where is the Windows UI code?**  
 `src/platform/win/nebula_window_win.cpp` — custom chrome, hit-testing, fullscreen, and child browser placement.

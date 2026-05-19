@@ -1,0 +1,17 @@
+# clangd configuration for Nebula Browser
+#
+# Full diagnostics require:
+#   1. CEF binary distribution unpacked to thirdparty/cef/
+#   2. Running: cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+#   3. Symlink or copy: ln -s build/compile_commands.json .
+#
+# Without compile_commands.json, clangd uses fallback flags below.
+
+CompileFlags:
+  Add:
+    - -std=c++20
+    - -xobjective-c++
+    - -Isrc
+    - -Ithirdparty/cef
+    - -Ithirdparty/cef/include
+    - -Wno-c++17-extensions

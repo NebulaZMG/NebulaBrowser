@@ -1,5 +1,9 @@
 #pragma once
 
+#ifndef UNREFERENCED_PARAMETER
+#define UNREFERENCED_PARAMETER(P) (void)(P)
+#endif
+
 namespace nebula::platform {
 
 struct Rect {
