@@ -228,6 +228,10 @@ void NebulaController::OnWindowCloseRequested() {
         return;
     }
 
+    BeginShutdown();
+}
+
+void NebulaController::BeginShutdown() {
     if (closing_) {
         if (window_ && window_->native_handle()) {
             nebula::platform::DestroyTopLevelWindow(window_->native_handle());
@@ -242,6 +246,13 @@ void NebulaController::OnWindowCloseRequested() {
         cookie_manager->FlushStore(nullptr);
     }
 
+    std::vector<CefRefPtr<CefBrowser>> content_browsers = closing_tab_browsers_;
+    for (const auto& tab : tabs_.Tabs()) {
+        if (tab.browser) {
+            content_browsers.push_back(tab.browser);
+        }
+    }
+
     if (chrome_browser_) {
         chrome_browser_->GetHost()->CloseBrowser(true);
     }
@@ -251,9 +262,9 @@ void NebulaController::OnWindowCloseRequested() {
     if (menu_popup_browser_) {
         menu_popup_browser_->GetHost()->CloseBrowser(true);
     }
-    for (const auto& tab : tabs_.Tabs()) {
-        if (tab.browser) {
-            tab.browser->GetHost()->CloseBrowser(true);
+    for (const auto& browser : content_browsers) {
+        if (browser) {
+            browser->GetHost()->CloseBrowser(true);
         }
     }
 
@@ -418,10 +429,10 @@ void NebulaController::OnChromeCommand(const std::string& command, const std::st
     } else if (command == "maximize" && window_) {
         window_->ToggleMaximize();
     } else if (command == "close" && window_) {
-        OnWindowCloseRequested();
+        BeginShutdown();
     } else if (command == "exit-bigpicture" && window_) {
         if (launch_options_.mode == AppMode::BigPicture) {
-            OnWindowCloseRequested();
+            BeginShutdown();
             return;
         }
         ExitBigPictureMode();
@@ -1189,7 +1200,8 @@ void NebulaController::MaybeFinishShutdown() {
         return;
     }
 
-    if (chrome_browser_ || big_picture_browser_ || menu_popup_browser_ || tabs_.HasOpenBrowsers()) {
+    if (chrome_browser_ || big_picture_browser_ || menu_popup_browser_ ||
+        tabs_.HasOpenBrowsers() || !closing_tab_browsers_.empty()) {
         return;
     }
 

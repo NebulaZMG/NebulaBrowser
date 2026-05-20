@@ -77,6 +77,7 @@ private:
     void InjectBigPictureCursor(CefRefPtr<CefBrowser> browser);
     void RemoveBigPictureCursor(CefRefPtr<CefBrowser> browser);
     void PersistSession() const;
+    void BeginShutdown();
     void MaybeFinishShutdown();
     bool ForgetClosingTabBrowser(CefRefPtr<CefBrowser> browser);
 
