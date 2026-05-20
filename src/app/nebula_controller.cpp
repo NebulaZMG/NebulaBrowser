@@ -13,8 +13,10 @@
 #include "include/cef_app.h"
 #include "include/cef_browser.h"
 #include "include/cef_cookie.h"
+#include "include/cef_task.h"
 #include "include/wrapper/cef_helpers.h"
 #include "platform/browser_host.h"
+#include "platform/default_browser.h"
 #include "ui/paths.h"
 
 namespace nebula::app {
@@ -203,6 +205,7 @@ void NebulaController::OnWindowCreated() {
     } else if (initial_url_.empty()) {
         tabs_.CreateInitialTab(nebula::ui::GetHomeUrl());
     } else {
+        // Create tab directly with the external URL - no delayed navigation needed
         tabs_.CreateInitialTab(initial_url_);
     }
     PersistSession();
@@ -229,6 +232,25 @@ void NebulaController::OnWindowCloseRequested() {
     }
 
     BeginShutdown();
+}
+
+void NebulaController::OnExternalOpenRequested(const std::string& target) {
+    if (target.empty()) {
+        return;
+    }
+
+    if (!chrome_ready_ && !big_picture_ready_) {
+        pending_initial_navigation_ = target;
+        return;
+    }
+
+    auto* tab = tabs_.ActiveTab();
+    if (tab && tab->browser) {
+        tabs_.LoadURL(target);
+        return;
+    }
+
+    CreateNewTab(target);
 }
 
 void NebulaController::BeginShutdown() {
@@ -297,6 +319,13 @@ void NebulaController::OnBrowserCreated(nebula::cef::BrowserRole role, CefRefPtr
         if (const auto* tab = tabs_.ActiveTab()) {
             SendChromeState(*tab);
         }
+        
+        // If we have a pending initial navigation, we might need to load it now
+        // if the content browser is already ready, or we'll let the content browser
+        // handle it when it's created.
+        if (!pending_initial_navigation_.empty() && tabs_.ActiveTab() && tabs_.ActiveTab()->browser) {
+            LoadPendingNavigationDelayed();
+        }
     } else if (role == nebula::cef::BrowserRole::BigPicture) {
         big_picture_browser_ = browser;
         big_picture_ready_ = true;
@@ -311,6 +340,12 @@ void NebulaController::OnBrowserCreated(nebula::cef::BrowserRole role, CefRefPtr
         SendMenuPopupZoom();
     } else {
         tabs_.SetActiveBrowser(browser);
+        
+        // Only load the pending navigation if the UI (chrome or big picture) is ready.
+        // Otherwise, wait for the UI to be ready.
+        if (!pending_initial_navigation_.empty() && (chrome_ready_ || big_picture_ready_)) {
+            LoadPendingNavigationDelayed();
+        }
     }
 
     ResizeBrowsers();
@@ -399,6 +434,15 @@ void NebulaController::OnChromeCommand(const std::string& command, const std::st
         SendThemeToChromeSurfaces(payload);
     } else if (command == "complete-first-run") {
         CompleteFirstRunSetup();
+    } else if (command == "check-default-browser") {
+        SendDefaultBrowserResult(payload, true, false);
+    } else if (command == "set-default-browser") {
+        const bool success = nebula::platform::RequestDefaultBrowser();
+        SendDefaultBrowserResult(
+            payload,
+            success,
+            success && !nebula::platform::IsDefaultBrowser(),
+            success ? std::string{} : "Unable to register Nebula as a browser.");
     } else if (command == "clear-site-history") {
         site_history_.clear();
         SaveSiteHistory(site_history_);
@@ -991,6 +1035,34 @@ void NebulaController::CompleteFirstRunSetup() {
     ResizeBrowsers();
 }
 
+void NebulaController::SendDefaultBrowserResult(const std::string& request_id,
+                                                bool success,
+                                                bool needs_user_action,
+                                                const std::string& error) {
+    auto* tab = tabs_.ActiveTab();
+    if (!tab || !tab->browser) {
+        return;
+    }
+
+    std::string detail = "{";
+    detail += "\"requestId\":\"" + nebula::browser::JsonEscape(request_id) + "\"";
+    detail += ",\"success\":";
+    detail += success ? "true" : "false";
+    detail += ",\"isDefault\":";
+    detail += nebula::platform::IsDefaultBrowser() ? "true" : "false";
+    detail += ",\"needsUserAction\":";
+    detail += needs_user_action ? "true" : "false";
+    if (!error.empty()) {
+        detail += ",\"error\":\"" + nebula::browser::JsonEscape(error) + "\"";
+    }
+    detail += "}";
+
+    const std::string script =
+        "window.dispatchEvent(new CustomEvent('nebula-default-browser-result',{detail:" +
+        detail + "}));";
+    tab->browser->GetMainFrame()->ExecuteJavaScript(script, tab->url, 0);
+}
+
 void NebulaController::ResizeBrowsers() {
     if (!window_) {
         return;
@@ -1228,6 +1300,41 @@ bool NebulaController::ForgetClosingTabBrowser(CefRefPtr<CefBrowser> browser) {
 
     closing_tab_browsers_.erase(it);
     return true;
+}
+
+namespace {
+
+class DelayedNavigationTask : public CefTask {
+public:
+    DelayedNavigationTask(nebula::browser::TabManager* tabs, std::string url)
+        : tabs_(tabs), url_(std::move(url)) {}
+
+    void Execute() override {
+        if (tabs_) {
+            tabs_->LoadURL(url_);
+        }
+    }
+
+private:
+    nebula::browser::TabManager* tabs_;
+    std::string url_;
+
+    IMPLEMENT_REFCOUNTING(DelayedNavigationTask);
+};
+
+}  // namespace
+
+void NebulaController::LoadPendingNavigationDelayed() {
+    if (pending_initial_navigation_.empty()) {
+        return;
+    }
+
+    const std::string target = std::move(pending_initial_navigation_);
+    pending_initial_navigation_.clear();
+
+    // Post a delayed task to load the URL after CEF has fully initialized.
+    // This gives CEF time to complete internal setup after browser creation.
+    CefPostDelayedTask(TID_UI, new DelayedNavigationTask(&tabs_, target), 250);
 }
 
 }  // namespace nebula::app

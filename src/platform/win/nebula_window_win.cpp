@@ -5,6 +5,7 @@
 #include <windowsx.h>
 
 #include <algorithm>
+#include <string_view>
 
 namespace nebula::window {
 namespace {
@@ -13,6 +14,7 @@ constexpr wchar_t kWindowClassName[] = L"NebulaBrowserWindow";
 constexpr wchar_t kWindowTitle[] = L"Nebula Browser";
 constexpr wchar_t kChildFrameHitTestOldProcProp[] = L"NebulaChildFrameHitTestOldProc";
 constexpr wchar_t kChildFrameHitTestParentProp[] = L"NebulaChildFrameHitTestParent";
+constexpr ULONG_PTR kOpenTargetCopyDataId = 0x4E42554CUL;
 constexpr int kTitleRowHeightDip = 42;
 constexpr int kWindowControlWidthDip = 46;
 constexpr int kWindowControlCount = 3;
@@ -120,6 +122,37 @@ RECT ToNativeRect(const platform::Rect& rect) {
         rect.x + rect.width,
         rect.y + rect.height,
     };
+}
+
+std::string WideToUtf8(std::wstring_view value) {
+    if (value.empty()) {
+        return {};
+    }
+
+    const int size = WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        value.data(),
+        static_cast<int>(value.size()),
+        nullptr,
+        0,
+        nullptr,
+        nullptr);
+    if (size <= 0) {
+        return {};
+    }
+
+    std::string result(size, '\0');
+    WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        value.data(),
+        static_cast<int>(value.size()),
+        result.data(),
+        size,
+        nullptr,
+        nullptr);
+    return result;
 }
 
 }  // namespace
@@ -353,6 +386,20 @@ LRESULT nebula::window::NebulaWindowImpl::WndProc(UINT message, WPARAM wparam, L
                 return 0;
             }
             break;
+
+        case WM_COPYDATA: {
+            const auto* copy_data = reinterpret_cast<const COPYDATASTRUCT*>(lparam);
+            if (copy_data && copy_data->dwData == kOpenTargetCopyDataId &&
+                copy_data->lpData && copy_data->cbData >= sizeof(wchar_t)) {
+                const auto* text = static_cast<const wchar_t*>(copy_data->lpData);
+                const size_t char_count = (copy_data->cbData / sizeof(wchar_t)) - 1;
+                if (delegate) {
+                    delegate->OnExternalOpenRequested(WideToUtf8(std::wstring_view(text, char_count)));
+                }
+                return TRUE;
+            }
+            break;
+        }
 
         case WM_DESTROY:
             hwnd = nullptr;

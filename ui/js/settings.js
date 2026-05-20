@@ -12,6 +12,109 @@ const HOME_SEARCH_Y_KEY = 'nebula-home-search-y'; // number (vh)
 const HOME_BOOKMARKS_Y_KEY = 'nebula-home-bookmarks-y'; // number (vh)
 const HOME_GLANCE_CORNER_KEY = 'nebula-home-glance-corner'; // 'br'|'bl'|'tr'|'tl'
 const DISPLAY_SCALE_KEY = 'nebula-display-scale'; // number (50-300)
+const defaultBrowserRequests = new Map();
+let defaultBrowserRequestId = 0;
+
+function hasNebulaNativeBridge() {
+  return !!(window.nebulaNative && typeof window.nebulaNative.postMessage === 'function');
+}
+
+window.addEventListener('nebula-default-browser-result', (event) => {
+  const detail = event.detail || {};
+  const pending = defaultBrowserRequests.get(detail.requestId);
+  if (!pending) return;
+
+  defaultBrowserRequests.delete(detail.requestId);
+  pending.resolve(detail);
+});
+
+function sendDefaultBrowserRequest(command) {
+  return new Promise((resolve, reject) => {
+    if (!hasNebulaNativeBridge()) {
+      reject(new Error('Native browser integration is unavailable.'));
+      return;
+    }
+
+    const requestId = `settings-default-browser-${Date.now()}-${++defaultBrowserRequestId}`;
+    const timeout = setTimeout(() => {
+      defaultBrowserRequests.delete(requestId);
+      reject(new Error('Timed out waiting for default browser status.'));
+    }, 10000);
+
+    defaultBrowserRequests.set(requestId, {
+      resolve: (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      }
+    });
+
+    try {
+      window.nebulaNative.postMessage(command, requestId);
+    } catch (error) {
+      defaultBrowserRequests.delete(requestId);
+      clearTimeout(timeout);
+      reject(error);
+    }
+  });
+}
+
+async function refreshDefaultBrowserStatus() {
+  const btn = document.getElementById('set-default-browser-btn');
+  const status = document.getElementById('default-browser-status');
+  if (!btn || !status) return;
+
+  if (!hasNebulaNativeBridge()) {
+    btn.disabled = true;
+    status.textContent = 'Default browser setup is only available in the native app.';
+    return;
+  }
+
+  try {
+    const result = await sendDefaultBrowserRequest('check-default-browser');
+    btn.disabled = !!result.isDefault;
+    btn.textContent = result.isDefault ? 'Already Default' : 'Make Default Browser';
+    status.textContent = result.isDefault
+      ? 'Nebula is your default browser.'
+      : 'Nebula is not your default browser.';
+  } catch (error) {
+    console.error('Default browser status error:', error);
+    status.textContent = 'Unable to check default browser status.';
+  }
+}
+
+function attachDefaultBrowserHandler() {
+  const btn = document.getElementById('set-default-browser-btn');
+  const status = document.getElementById('default-browser-status');
+  if (!btn || !status) return;
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = 'Opening Settings...';
+    status.textContent = 'Opening Windows default apps settings...';
+
+    try {
+      const result = await sendDefaultBrowserRequest('set-default-browser');
+      if (result.isDefault) {
+        btn.textContent = 'Already Default';
+        status.textContent = 'Nebula is your default browser.';
+        return;
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Check Again';
+      status.textContent = result.success
+        ? 'Choose Nebula in Windows default apps settings, then check again.'
+        : (result.error || 'Unable to open default browser settings.');
+    } catch (error) {
+      console.error('Default browser setup error:', error);
+      btn.disabled = false;
+      btn.textContent = 'Try Again';
+      status.textContent = 'Unable to open default browser settings.';
+    }
+  });
+
+  refreshDefaultBrowserStatus();
+}
 
 function showStatus(message) {
   if (statusText && statusDiv) {
@@ -74,6 +177,8 @@ function attachClearHandler(btn) {
 // Try attaching immediately, and again on DOMContentLoaded
 attachClearHandler(clearBtn);
 window.addEventListener('DOMContentLoaded', () => {
+  attachDefaultBrowserHandler();
+
   if (!clearBtn) {
     clearBtn = document.getElementById('clear-data-btn');
     attachClearHandler(clearBtn);

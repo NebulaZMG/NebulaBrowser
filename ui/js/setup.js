@@ -16,6 +16,78 @@ function hasNebulaNativeBridge() {
   return !!(window.nebulaNative && typeof window.nebulaNative.postMessage === 'function');
 }
 
+const defaultBrowserRequests = new Map();
+let defaultBrowserRequestId = 0;
+
+window.addEventListener('nebula-default-browser-result', (event) => {
+  const detail = event.detail || {};
+  const pending = defaultBrowserRequests.get(detail.requestId);
+  if (!pending) return;
+
+  defaultBrowserRequests.delete(detail.requestId);
+  pending.resolve(detail);
+});
+
+function sendDefaultBrowserRequest(command) {
+  return new Promise((resolve, reject) => {
+    if (!hasNebulaNativeBridge()) {
+      reject(new Error('Native browser integration is unavailable.'));
+      return;
+    }
+
+    const requestId = `default-browser-${Date.now()}-${++defaultBrowserRequestId}`;
+    const timeout = setTimeout(() => {
+      defaultBrowserRequests.delete(requestId);
+      reject(new Error('Timed out waiting for default browser status.'));
+    }, 10000);
+
+    defaultBrowserRequests.set(requestId, {
+      resolve: (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      reject: (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      }
+    });
+
+    try {
+      window.nebulaNative.postMessage(command, requestId);
+    } catch (error) {
+      defaultBrowserRequests.delete(requestId);
+      clearTimeout(timeout);
+      reject(error);
+    }
+  });
+}
+
+function createNebulaNativeApi() {
+  return {
+    async getAllThemes() {
+      return { default: getPresetThemes() };
+    },
+    async isDefaultBrowser() {
+      const result = await sendDefaultBrowserRequest('check-default-browser');
+      return !!result.isDefault;
+    },
+    async setAsDefaultBrowser() {
+      return sendDefaultBrowserRequest('set-default-browser');
+    },
+    async applyTheme(themeId) {
+      const theme = getThemeById(themeId);
+      if (theme) {
+        localStorage.setItem('currentTheme', JSON.stringify(normalizeTheme(theme)));
+      }
+      localStorage.setItem('activeThemeName', themeId);
+    },
+    async completeFirstRun(data) {
+      localStorage.setItem('nebula-first-run-complete', JSON.stringify(data));
+      window.nebulaNative.postMessage('complete-first-run', JSON.stringify(data));
+    }
+  };
+}
+
 function getPresetThemes() {
   if (typeof BrowserCustomizer === 'function') {
     const customizer = new BrowserCustomizer({ skipInit: true });
@@ -61,7 +133,7 @@ function normalizeTheme(theme) {
   };
 }
 
-const nativeApi = window.api || {
+const fallbackApi = {
   async getAllThemes() {
     return { default: getPresetThemes() };
   },
@@ -85,6 +157,8 @@ const nativeApi = window.api || {
     }
   }
 };
+
+const nativeApi = window.api || (hasNebulaNativeBridge() ? createNebulaNativeApi() : fallbackApi);
 
 // Initialize setup when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
@@ -402,7 +476,7 @@ async function setDefaultBrowser() {
     const result = await nativeApi.setAsDefaultBrowser();
     
     if (result.success) {
-      const isDefault = await window.api.isDefaultBrowser();
+      const isDefault = !!result.isDefault || await nativeApi.isDefaultBrowser();
       if (isDefault) {
         setupState.defaultBrowserSet = true;
         

@@ -26,7 +26,9 @@ void PrepareApp() {
     }
 }
 
-bool TryAcquireSingleInstance() {
+bool TryAcquireSingleInstance(const std::string& launch_target) {
+    NEBULA_UNUSED(launch_target);
+
     const auto lock_path = nebula::ui::GetUserDataDirectory() / ".nebula_instance.lock";
     std::error_code ec;
     std::filesystem::create_directories(lock_path.parent_path(), ec);

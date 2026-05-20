@@ -27,6 +27,7 @@ public:
     void OnWindowCreated() override;
     void OnWindowResized(const nebula::window::BrowserLayout& layout) override;
     void OnWindowCloseRequested() override;
+    void OnExternalOpenRequested(const std::string& target) override;
 
     void OnActiveTabChanged(const nebula::browser::NebulaTab& tab) override;
 
@@ -69,6 +70,10 @@ private:
     void SetBigPictureBrowseVisible(bool visible);
     void SetContentFullscreen(bool fullscreen);
     void CompleteFirstRunSetup();
+    void SendDefaultBrowserResult(const std::string& request_id,
+                                  bool success,
+                                  bool needs_user_action,
+                                  const std::string& error = {});
     void ResizeBrowsers();
     void SendChromeState(const nebula::browser::NebulaTab& tab);
     void SendBigPictureState(const nebula::browser::NebulaTab& tab);
@@ -80,9 +85,11 @@ private:
     void BeginShutdown();
     void MaybeFinishShutdown();
     bool ForgetClosingTabBrowser(CefRefPtr<CefBrowser> browser);
+    void LoadPendingNavigationDelayed();
 
     nebula::platform::AppStartup startup_;
     std::string initial_url_;
+    std::string pending_initial_navigation_;
     LaunchOptions launch_options_;
     bool closing_ = false;
     bool chrome_ready_ = false;

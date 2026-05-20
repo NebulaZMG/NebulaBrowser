@@ -54,6 +54,7 @@ set(NEBULA_COMMON_SOURCES
 
 if(OS_WINDOWS)
     set(NEBULA_PLATFORM_SOURCES
+        src/platform/win/default_browser_win.cpp
         src/platform/win/paths_win.cpp
         src/platform/win/startup_win.cpp
         src/platform/win/browser_host_win.cpp
@@ -61,6 +62,7 @@ if(OS_WINDOWS)
     )
 elseif(OS_MACOSX)
     set(NEBULA_PLATFORM_SOURCES
+        src/platform/mac/default_browser_mac.mm
         src/platform/mac/paths_mac.cpp
         src/platform/mac/startup_mac.mm
         src/platform/mac/browser_host_mac.mm
@@ -75,6 +77,7 @@ elseif(OS_MACOSX)
     )
 elseif(OS_LINUX)
     set(NEBULA_PLATFORM_SOURCES
+        src/platform/linux/default_browser_linux.cpp
         src/platform/linux/paths_linux.cpp
         src/platform/linux/startup_linux.cpp
         src/platform/linux/browser_host_linux.cpp

@@ -111,10 +111,14 @@ bool NebulaBrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser
         const bool allowed_settings_command =
             IsSettingsFrame(frame) && (command == "navigate" ||
                                        command == "new-tab" ||
+                                       command == "check-default-browser" ||
+                                       command == "set-default-browser" ||
                                        command == "clear-site-history" ||
                                        command == "clear-search-history");
         const bool allowed_setup_command =
-            command == "complete-first-run" && IsSetupFrame(frame);
+            IsSetupFrame(frame) && (command == "complete-first-run" ||
+                                    command == "check-default-browser" ||
+                                    command == "set-default-browser");
         const bool allowed_big_picture_command =
             IsBigPictureFrame(frame) && command == "exit-bigpicture";
         if (!allowed_insecure_command && !allowed_settings_command &&

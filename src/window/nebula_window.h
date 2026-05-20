@@ -17,6 +17,7 @@ public:
     virtual void OnWindowCreated() = 0;
     virtual void OnWindowResized(const BrowserLayout& layout) = 0;
     virtual void OnWindowCloseRequested() = 0;
+    virtual void OnExternalOpenRequested(const std::string& target) = 0;
 };
 
 class NebulaWindow {
