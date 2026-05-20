@@ -12,17 +12,58 @@ const setupState = {
   themes: []
 };
 
+function hasNebulaNativeBridge() {
+  return !!(window.nebulaNative && typeof window.nebulaNative.postMessage === 'function');
+}
+
+function getPresetThemes() {
+  if (typeof BrowserCustomizer === 'function') {
+    const customizer = new BrowserCustomizer({ skipInit: true });
+    return customizer.predefinedThemes || { default: customizer.defaultTheme };
+  }
+
+  return {
+    default: {
+      name: 'Default',
+      colors: {
+        bg: '#121418',
+        darkBlue: '#0B1C2B',
+        darkPurple: '#1B1035',
+        primary: '#7B2EFF',
+        accent: '#00C6FF',
+        text: '#E0E0E0',
+        urlBarBg: '#1C2030',
+        urlBarText: '#E0E0E0',
+        urlBarBorder: '#3E4652',
+        tabBg: '#161925',
+        tabText: '#A4A7B3',
+        tabActive: '#1C2030',
+        tabActiveText: '#E0E0E0',
+        tabBorder: '#2B3040'
+      },
+      layout: 'centered',
+      showLogo: true,
+      customTitle: 'Nebula Browser',
+      gradient: 'linear-gradient(145deg, #121418 0%, #1B1035 100%)'
+    }
+  };
+}
+
+function normalizeTheme(theme) {
+  const fallback = getPresetThemes().default;
+  return {
+    ...fallback,
+    ...(theme || {}),
+    colors: {
+      ...fallback.colors,
+      ...((theme && theme.colors) || {})
+    }
+  };
+}
+
 const nativeApi = window.api || {
   async getAllThemes() {
-    return {
-      default: {
-        default: {
-          name: 'Default',
-          description: 'Classic Nebula theme',
-          colors: { bg: '#121418', primary: '#7B2EFF', accent: '#00C6FF', text: '#E0E0E0' }
-        }
-      }
-    };
+    return { default: getPresetThemes() };
   },
   async isDefaultBrowser() {
     return false;
@@ -31,10 +72,17 @@ const nativeApi = window.api || {
     return { success: false, error: 'Default browser setup is handled by the native CEF app.' };
   },
   async applyTheme(themeId) {
+    const theme = getThemeById(themeId);
+    if (theme) {
+      localStorage.setItem('currentTheme', JSON.stringify(normalizeTheme(theme)));
+    }
     localStorage.setItem('activeThemeName', themeId);
   },
   async completeFirstRun(data) {
     localStorage.setItem('nebula-first-run-complete', JSON.stringify(data));
+    if (hasNebulaNativeBridge()) {
+      window.nebulaNative.postMessage('complete-first-run', JSON.stringify(data));
+    }
   }
 };
 
@@ -67,9 +115,7 @@ async function loadThemes() {
     console.error('[Setup] Error loading themes:', error);
     // Fallback to a default theme
     setupState.themes = {
-      default: {
-        default: { name: 'Default', description: 'Classic Nebula theme', colors: { bg: '#121418', primary: '#7B2EFF', accent: '#00C6FF' } }
-      }
+      default: getPresetThemes()
     };
     renderThemeGrid(setupState.themes);
   }
@@ -167,8 +213,9 @@ function hexToRgb(hex) {
  * Apply theme to the setup page UI and persist selection
  */
 function applyThemeToSetupPage(theme, themeId = null) {
-  if (!theme || !theme.colors) return;
-  const colors = theme.colors;
+  const completeTheme = normalizeTheme(theme);
+  if (!completeTheme || !completeTheme.colors) return;
+  const colors = completeTheme.colors;
   const root = document.documentElement;
 
   const setVar = (cssVar, value, fallback) => {
@@ -202,15 +249,15 @@ function applyThemeToSetupPage(theme, themeId = null) {
     setVar('--warning-rgb', `${warningRgb.r}, ${warningRgb.g}, ${warningRgb.b}`);
   }
 
-  if (theme.gradient) {
-    document.body.style.background = theme.gradient;
+  if (completeTheme.gradient) {
+    document.body.style.background = completeTheme.gradient;
   } else if (colors.bg) {
     document.body.style.background = colors.bg;
   }
 
   // Persist for main UI to pick up on first load
   try {
-    localStorage.setItem('currentTheme', JSON.stringify(theme));
+    localStorage.setItem('currentTheme', JSON.stringify(completeTheme));
     if (themeId) localStorage.setItem('activeThemeName', themeId);
   } catch (err) {
     console.warn('[Setup] Failed to persist theme:', err);
@@ -499,7 +546,9 @@ async function completeSetup() {
     
     console.log('[Setup] First-time setup completed successfully');
     
-    window.location.href = 'home.html';
+    if (!hasNebulaNativeBridge()) {
+      window.location.href = 'home.html';
+    }
   } catch (error) {
     console.error('[Setup] Error completing setup:', error);
     alert('There was an error saving your preferences. Please try again.');
@@ -522,7 +571,9 @@ async function skipSetup() {
     
     console.log('[Setup] Setup skipped, using defaults');
     
-    window.location.href = 'home.html';
+    if (!hasNebulaNativeBridge()) {
+      window.location.href = 'home.html';
+    }
   } catch (error) {
     console.error('[Setup] Error skipping setup:', error);
     window.location.href = 'home.html';

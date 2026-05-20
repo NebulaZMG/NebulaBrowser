@@ -58,6 +58,7 @@ private:
     void CreateMenuPopupBrowser();
     void PositionMenuPopup();
     void SendMenuPopupZoom();
+    void SendThemeToChromeSurfaces(const std::string& theme_json);
     void ToggleDevTools();
     void AdjustZoom(double delta);
     void FreshReload();
@@ -67,6 +68,7 @@ private:
     void SendBigPictureText(const std::string& payload);
     void SetBigPictureBrowseVisible(bool visible);
     void SetContentFullscreen(bool fullscreen);
+    void CompleteFirstRunSetup();
     void ResizeBrowsers();
     void SendChromeState(const nebula::browser::NebulaTab& tab);
     void SendBigPictureState(const nebula::browser::NebulaTab& tab);
@@ -87,6 +89,7 @@ private:
     bool big_picture_mode_ = false;
     bool big_picture_browse_visible_ = false;
     bool content_fullscreen_ = false;
+    bool first_run_setup_active_ = false;
     bool menu_popup_visible_ = false;
 
     std::unique_ptr<nebula::window::NebulaWindow> window_;

@@ -147,6 +147,11 @@ std::filesystem::path GetSessionStatePath() {
     return user_data.empty() ? std::filesystem::path{} : user_data / "session_state.json";
 }
 
+std::filesystem::path GetFirstRunStatePath() {
+    auto user_data = GetUserDataDirectory();
+    return user_data.empty() ? std::filesystem::path{} : user_data / "first_run_state.json";
+}
+
 std::filesystem::path GetUiPagePath(const std::string& page_name) {
     const auto exe_dir = GetExecutableDirectory();
     if (exe_dir.empty()) {
@@ -180,6 +185,10 @@ std::string GetChromeUrl() {
 
 std::string GetHomeUrl() {
     return InternalUrlForSlug("home");
+}
+
+std::string GetSetupUrl() {
+    return InternalUrlForSlug("setup");
 }
 
 std::string GetSettingsUrl() {

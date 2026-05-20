@@ -26,6 +26,14 @@ bool IsSettingsFrame(CefRefPtr<CefFrame> frame) {
     return nebula::ui::ToInternalUrl(frame->GetURL().ToString()).starts_with("nebula://settings");
 }
 
+bool IsSetupFrame(CefRefPtr<CefFrame> frame) {
+    if (!frame) {
+        return false;
+    }
+
+    return nebula::ui::ToInternalUrl(frame->GetURL().ToString()).starts_with("nebula://setup");
+}
+
 bool IsBigPictureFrame(CefRefPtr<CefFrame> frame) {
     if (!frame) {
         return false;
@@ -105,10 +113,12 @@ bool NebulaBrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser
                                        command == "new-tab" ||
                                        command == "clear-site-history" ||
                                        command == "clear-search-history");
+        const bool allowed_setup_command =
+            command == "complete-first-run" && IsSetupFrame(frame);
         const bool allowed_big_picture_command =
             IsBigPictureFrame(frame) && command == "exit-bigpicture";
         if (!allowed_insecure_command && !allowed_settings_command &&
-            !allowed_big_picture_command) {
+            !allowed_setup_command && !allowed_big_picture_command) {
             return false;
         }
     } else if (role_ == BrowserRole::BigPicture) {

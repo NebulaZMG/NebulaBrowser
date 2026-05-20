@@ -4,7 +4,7 @@
  */
 
 class BrowserCustomizer {
-  constructor() {
+  constructor(options = {}) {
     this.defaultTheme = {
       name: 'Default',
       colors: {
@@ -285,6 +285,10 @@ class BrowserCustomizer {
         gradient: 'linear-gradient(145deg, #f8f4ff 0%, #e6d8ff 100%)'
       }
     };
+
+    if (options.skipInit) {
+      return;
+    }
 
     this.currentTheme = this.loadTheme();
     this.activeThemeName = this.loadActiveThemeName();
@@ -584,9 +588,13 @@ class BrowserCustomizer {
     // This will be called to apply theme to home.html and other pages
     this.saveTheme();
 
-    // Send theme update to host (for settings webview)
-    if (window.electronAPI && typeof window.electronAPI.sendToHost === 'function') {
-      window.electronAPI.sendToHost('theme-update', this.currentTheme);
+    const themePayload = JSON.stringify(this.currentTheme);
+
+    // Send theme update to host so the separate chrome browser can update live.
+    if (window.nebulaNative && typeof window.nebulaNative.postMessage === 'function') {
+      window.nebulaNative.postMessage('theme-update', themePayload);
+    } else if (window.electronAPI && typeof window.electronAPI.sendToHost === 'function') {
+      window.electronAPI.sendToHost('theme-update', themePayload);
     }
     // Fallback: send via postMessage (for iframe embedding)
     try {

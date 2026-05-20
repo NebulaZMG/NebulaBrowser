@@ -40,6 +40,7 @@ SET_CEF_TARGET_OUT_DIR()
 # ------------------------------------------------------------
 
 set(NEBULA_COMMON_SOURCES
+    src/app/first_run_state.cpp
     src/app/nebula_controller.cpp
     src/app/run.cpp
     src/browser/session_state.cpp

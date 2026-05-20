@@ -7,6 +7,7 @@
 #include <fstream>
 #include <system_error>
 
+#include "app/first_run_state.h"
 #include "browser/session_state.h"
 #include "browser/url_utils.h"
 #include "include/cef_app.h"
@@ -194,14 +195,19 @@ void NebulaController::OnWindowCreated() {
         window_->SetFullscreen(true);
     }
 
-    if (initial_url_.empty()) {
+    first_run_setup_active_ =
+        !big_picture_mode_ && initial_url_.empty() && ShouldShowFirstRunSetup();
+
+    if (first_run_setup_active_) {
+        tabs_.CreateInitialTab(nebula::ui::GetSetupUrl());
+    } else if (initial_url_.empty()) {
         tabs_.CreateInitialTab(nebula::ui::GetHomeUrl());
     } else {
         tabs_.CreateInitialTab(initial_url_);
     }
     PersistSession();
 
-    if (!big_picture_mode_) {
+    if (!big_picture_mode_ && !first_run_setup_active_) {
         CreateChromeBrowser();
     }
     CreateContentBrowser();
@@ -378,6 +384,10 @@ void NebulaController::OnChromeCommand(const std::string& command, const std::st
         CloseMenuPopup();
     } else if (command == "home") {
         tabs_.LoadURL(nebula::ui::GetHomeUrl());
+    } else if (command == "theme-update") {
+        SendThemeToChromeSurfaces(payload);
+    } else if (command == "complete-first-run") {
+        CompleteFirstRunSetup();
     } else if (command == "clear-site-history") {
         site_history_.clear();
         SaveSiteHistory(site_history_);
@@ -656,6 +666,10 @@ nebula::window::BrowserLayout NebulaController::CurrentBrowserLayout() const {
         return {};
     }
 
+    if (first_run_setup_active_) {
+        return window_->CurrentLayout(false);
+    }
+
     if (!big_picture_mode_) {
         return window_->CurrentLayout(!content_fullscreen_);
     }
@@ -759,6 +773,29 @@ void NebulaController::SendMenuPopupZoom() {
         "window.NebulaMenuPopup && window.NebulaMenuPopup.setZoomLevel(" +
         std::to_string(zoom_level) + ");";
     menu_popup_browser_->GetMainFrame()->ExecuteJavaScript(script, nebula::ui::GetMenuPopupUrl(), 0);
+}
+
+void NebulaController::SendThemeToChromeSurfaces(const std::string& theme_json) {
+    if (theme_json.empty()) {
+        return;
+    }
+
+    const std::string escaped_theme = nebula::browser::JsonEscape(theme_json);
+    const std::string script =
+        "(function(){"
+        "try{"
+        "const theme=JSON.parse(\"" + escaped_theme + "\");"
+        "if(window.NebulaChrome&&window.NebulaChrome.applyTheme){window.NebulaChrome.applyTheme(theme);}"
+        "if(window.NebulaMenuPopup&&window.NebulaMenuPopup.applyTheme){window.NebulaMenuPopup.applyTheme(theme);}"
+        "}catch(e){console.warn('[Theme] Failed to apply chrome theme',e);}"
+        "})();";
+
+    if (chrome_browser_) {
+        chrome_browser_->GetMainFrame()->ExecuteJavaScript(script, nebula::ui::GetChromeUrl(), 0);
+    }
+    if (menu_popup_browser_) {
+        menu_popup_browser_->GetMainFrame()->ExecuteJavaScript(script, nebula::ui::GetMenuPopupUrl(), 0);
+    }
 }
 
 void NebulaController::ToggleDevTools() {
@@ -920,6 +957,25 @@ void NebulaController::SetContentFullscreen(bool fullscreen) {
     SetBrowserVisible(chrome_browser_, !fullscreen);
     if (window_) {
         window_->SetFullscreen(fullscreen);
+    }
+    ResizeBrowsers();
+}
+
+void NebulaController::CompleteFirstRunSetup() {
+    WriteFirstRunState(false);
+
+    if (!first_run_setup_active_) {
+        tabs_.LoadURL(nebula::ui::GetHomeUrl());
+        PersistSession();
+        return;
+    }
+
+    first_run_setup_active_ = false;
+    tabs_.LoadURL(nebula::ui::GetHomeUrl());
+    PersistSession();
+
+    if (!big_picture_mode_ && !chrome_browser_) {
+        CreateChromeBrowser();
     }
     ResizeBrowsers();
 }

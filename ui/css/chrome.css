@@ -6,10 +6,20 @@
   --text: #e8e8f0;
   --muted: #7a7e90;
   --accent: #7b2eff;
+  --primary: #7b2eff;
   --accent-2: #00c6ff;
   --outline: #1f2533;
   --outline-soft: rgba(255, 255, 255, 0.06);
   --danger: #e0445c;
+  --url-bar-bg: #1c2030;
+  --url-bar-text: #e0e0e0;
+  --url-bar-border: #3e4652;
+  --tab-bg: #161925;
+  --tab-text: #a4a7b3;
+  --tab-active: #1c2030;
+  --tab-active-text: #e0e0e0;
+  --tab-border: #2b3040;
+  --chrome-hover: color-mix(in srgb, var(--text) 10%, transparent);
   color-scheme: dark;
 }
 
@@ -102,21 +112,21 @@ button:disabled {
   border: 1px solid transparent;
   border-bottom: none;
   background: transparent;
-  color: var(--muted);
+  color: var(--tab-text);
   cursor: pointer;
   font-size: 0.82rem;
   transition: background 120ms, color 120ms;
 }
 
 .tab:hover:not(.active) {
-  background: var(--surface);
-  color: var(--text);
+  background: var(--tab-bg);
+  color: var(--tab-active-text);
 }
 
 .tab.active {
-  background: var(--surface-raised);
-  border-color: var(--outline);
-  color: var(--text);
+  background: var(--tab-active);
+  border-color: var(--tab-border);
+  color: var(--tab-active-text);
 }
 
 .tab-title {
@@ -139,7 +149,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--accent);
+  background: var(--primary);
   opacity: 0.85;
   border-radius: 999px;
   overflow: hidden;
@@ -166,8 +176,8 @@ button:disabled {
 .tab-loading {
   width: 13px;
   height: 13px;
-  border: 2px solid rgba(0, 198, 255, 0.2);
-  border-top-color: var(--accent-2);
+  border: 2px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-top-color: var(--accent);
   border-radius: 999px;
   animation: spin 0.8s linear infinite;
 }
@@ -181,7 +191,7 @@ button:disabled {
   padding: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--muted);
+  color: var(--tab-text);
   opacity: 0;
   transition: background 120ms, color 120ms, opacity 120ms;
 }
@@ -193,8 +203,8 @@ button:disabled {
 }
 
 .tab-close:hover {
-  background: var(--surface-hover);
-  color: var(--text);
+  background: var(--chrome-hover);
+  color: var(--tab-active-text);
 }
 
 .tab-add {
@@ -207,14 +217,14 @@ button:disabled {
   border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--muted);
+  color: var(--tab-text);
   transition: background 120ms, color 120ms, border-color 120ms;
 }
 
 .tab-add:hover {
-  background: var(--surface-hover);
-  border-color: var(--outline);
-  color: var(--text);
+  background: var(--chrome-hover);
+  border-color: var(--tab-border);
+  color: var(--tab-active-text);
 }
 
 /* ── Window controls ────────────────────────────────────────── */
@@ -233,13 +243,13 @@ button:disabled {
   justify-content: center;
   width: 46px;
   background: transparent;
-  color: var(--muted);
+  color: var(--tab-text);
   transition: background 100ms, color 100ms;
 }
 
 .window-controls button:hover {
-  background: var(--surface-hover);
-  color: var(--text);
+  background: var(--chrome-hover);
+  color: var(--tab-active-text);
 }
 
 .window-controls .close:hover {
@@ -252,8 +262,8 @@ button:disabled {
 .toolbar {
   gap: 4px;
   padding: 0 12px;
-  background: var(--surface-raised);
-  border-top: 1px solid var(--outline);
+  background: var(--tab-active);
+  border-top: 1px solid var(--tab-border);
   overflow: visible;
 }
 
@@ -283,15 +293,15 @@ button:disabled {
   border-radius: 9px;
   background: transparent;
   border: 1px solid transparent;
-  color: var(--muted);
+  color: var(--tab-text);
   flex-shrink: 0;
   transition: background 120ms, color 120ms, border-color 120ms;
 }
 
 .icon-button:hover:not(:disabled) {
-  background: var(--surface-hover);
-  border-color: var(--outline);
-  color: var(--text);
+  background: var(--chrome-hover);
+  border-color: var(--tab-border);
+  color: var(--tab-active-text);
 }
 
 /* ── Address bar ────────────────────────────────────────────── */
@@ -305,15 +315,15 @@ button:disabled {
   flex: 1;
   margin: 0 4px;
   overflow: hidden;
-  border: 1px solid var(--outline);
+  border: 1px solid var(--url-bar-border);
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--url-bar-bg);
   transition: border-color 140ms, box-shadow 140ms;
 }
 
 .address-shell:focus-within {
-  border-color: rgba(123, 46, 255, 0.55);
-  box-shadow: 0 0 0 3px rgba(123, 46, 255, 0.12);
+  border-color: color-mix(in srgb, var(--primary) 70%, var(--url-bar-border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .address-shell input {
@@ -323,12 +333,12 @@ button:disabled {
   outline: 0;
   padding: 0 16px;
   background: transparent;
-  color: var(--text);
+  color: var(--url-bar-text);
   font-size: 0.84rem;
 }
 
 .address-shell input::placeholder {
-  color: var(--muted);
+  color: color-mix(in srgb, var(--url-bar-text) 55%, transparent);
 }
 
 .progress-bar {

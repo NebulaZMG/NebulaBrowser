@@ -65,7 +65,7 @@ function attachClearHandler(btn) {
     } finally {
       const currentTheme = window.browserCustomizer ? window.browserCustomizer.currentTheme : null;
       if (currentTheme && window.electronAPI && typeof window.electronAPI.sendToHost === 'function') {
-        window.electronAPI.sendToHost('theme-update', currentTheme);
+        window.electronAPI.sendToHost('theme-update', JSON.stringify(currentTheme));
       }
     }
   };

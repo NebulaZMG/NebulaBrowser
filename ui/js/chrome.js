@@ -1,5 +1,24 @@
 const SEARCH_URL = 'https://www.google.com/search?q=';
 
+const DEFAULT_THEME = {
+  colors: {
+    bg: '#080a0f',
+    darkBlue: '#0e1119',
+    darkPurple: '#141824',
+    primary: '#7b2eff',
+    accent: '#00c6ff',
+    text: '#e8e8f0',
+    urlBarBg: '#1c2030',
+    urlBarText: '#e0e0e0',
+    urlBarBorder: '#3e4652',
+    tabBg: '#161925',
+    tabText: '#a4a7b3',
+    tabActive: '#1c2030',
+    tabActiveText: '#e0e0e0',
+    tabBorder: '#2b3040'
+  }
+};
+
 const state = {
   id: 1,
   url: '',
@@ -11,6 +30,79 @@ const state = {
   favicon: '',
   tabs: []
 };
+
+function hexToRgb(hex) {
+  if (!hex || typeof hex !== 'string') return null;
+  let normalized = hex.trim().replace(/^#/, '');
+  if (normalized.length === 3) {
+    normalized = normalized.split('').map(char => char + char).join('');
+  }
+  if (!/^[a-fA-F\d]{6}$/.test(normalized)) return null;
+
+  const value = parseInt(normalized, 16);
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255
+  };
+}
+
+function isDarkColor(hex) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return true;
+  const luminance = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+  return luminance < 0.5;
+}
+
+function setCssVar(name, value, fallback) {
+  document.documentElement.style.setProperty(name, value || fallback);
+}
+
+function normalizeTheme(theme) {
+  const colors = theme?.colors || {};
+  return {
+    ...DEFAULT_THEME,
+    ...(theme || {}),
+    colors: {
+      ...DEFAULT_THEME.colors,
+      ...colors
+    }
+  };
+}
+
+function applyTheme(theme) {
+  const normalized = normalizeTheme(theme);
+  const colors = normalized.colors;
+
+  setCssVar('--bg', colors.bg, DEFAULT_THEME.colors.bg);
+  setCssVar('--surface', colors.darkBlue, DEFAULT_THEME.colors.darkBlue);
+  setCssVar('--surface-raised', colors.darkPurple, DEFAULT_THEME.colors.darkPurple);
+  setCssVar('--text', colors.text, DEFAULT_THEME.colors.text);
+  setCssVar('--muted', colors.tabText, DEFAULT_THEME.colors.tabText);
+  setCssVar('--primary', colors.primary, DEFAULT_THEME.colors.primary);
+  setCssVar('--accent', colors.accent, DEFAULT_THEME.colors.accent);
+  setCssVar('--accent-2', colors.accent, DEFAULT_THEME.colors.accent);
+  setCssVar('--outline', colors.tabBorder, DEFAULT_THEME.colors.tabBorder);
+  setCssVar('--url-bar-bg', colors.urlBarBg, colors.darkBlue);
+  setCssVar('--url-bar-text', colors.urlBarText, colors.text);
+  setCssVar('--url-bar-border', colors.urlBarBorder, colors.primary);
+  setCssVar('--tab-bg', colors.tabBg, colors.darkBlue);
+  setCssVar('--tab-text', colors.tabText, colors.text);
+  setCssVar('--tab-active', colors.tabActive, colors.darkPurple);
+  setCssVar('--tab-active-text', colors.tabActiveText, colors.text);
+  setCssVar('--tab-border', colors.tabBorder, colors.darkBlue);
+
+  document.documentElement.style.colorScheme = isDarkColor(colors.bg) ? 'dark' : 'light';
+}
+
+function applySavedTheme() {
+  try {
+    const savedTheme = localStorage.getItem('currentTheme');
+    if (savedTheme) applyTheme(JSON.parse(savedTheme));
+  } catch (error) {
+    console.warn('[Chrome] Failed to apply saved theme:', error);
+  }
+}
 
 function toNavigationUrl(input) {
   const value = (input || '').trim();
@@ -175,9 +267,19 @@ function wireCommands() {
   });
 }
 
-window.NebulaChrome = { applyState, postCommand, toNavigationUrl };
+window.NebulaChrome = { applyState, applyTheme, postCommand, toNavigationUrl };
+
+window.addEventListener('storage', event => {
+  if (event.key !== 'currentTheme' || !event.newValue) return;
+  try {
+    applyTheme(JSON.parse(event.newValue));
+  } catch (error) {
+    console.warn('[Chrome] Failed to apply updated theme:', error);
+  }
+});
 
 document.addEventListener('DOMContentLoaded', () => {
+  applySavedTheme();
   wireCommands();
   applyState(state);
 });
