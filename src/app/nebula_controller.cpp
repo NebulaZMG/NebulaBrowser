@@ -165,6 +165,18 @@ std::string GetChromeDisplayUrl(const std::string& url) {
     return nebula::ui::IsInternalHomeUrl(url) ? std::string{} : url;
 }
 
+const char* CurrentPlatformName() {
+#if defined(_WIN32)
+    return "windows";
+#elif defined(__APPLE__)
+    return "macos";
+#elif defined(__linux__)
+    return "linux";
+#else
+    return "unknown";
+#endif
+}
+
 void SetBrowserVisible(CefRefPtr<CefBrowser> browser, bool visible) {
     if (!browser) {
         return;
@@ -1127,6 +1139,7 @@ void NebulaController::SendChromeState(const nebula::browser::NebulaTab& tab) {
         ",\"canGoForward\":" + std::string(tab.CanGoForward() ? "true" : "false") +
         ",\"favicon\":\"" + nebula::browser::JsonEscape(tab.favicon_url) + "\"" +
         ",\"zoomLevel\":" + std::to_string(zoom_level) +
+        ",\"platform\":\"" + CurrentPlatformName() + "\"" +
         ",\"tabs\":" + tabs_json +
         "});";
 

@@ -174,7 +174,7 @@ std::string FilePathToUrl(std::filesystem::path path) {
     for (char ch : value) {
         encoded += ch == ' ' ? "%20" : std::string(1, ch);
     }
-    return "file:///" + encoded;
+    return encoded.starts_with('/') ? "file://" + encoded : "file:///" + encoded;
 }
 
 std::string GetChromeUrl() {

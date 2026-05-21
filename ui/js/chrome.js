@@ -28,8 +28,23 @@ const state = {
   canGoBack: false,
   canGoForward: false,
   favicon: '',
+  platform: detectHostPlatform(),
   tabs: []
 };
+
+function detectHostPlatform() {
+  const platform = `${navigator.userAgentData?.platform || ''} ${navigator.platform || ''} ${navigator.userAgent || ''}`.toLowerCase();
+  if (platform.includes('mac')) return 'macos';
+  if (platform.includes('win')) return 'windows';
+  if (platform.includes('linux')) return 'linux';
+  return 'unknown';
+}
+
+function applyPlatform(platform) {
+  const normalized = ['macos', 'windows', 'linux'].includes(platform) ? platform : 'unknown';
+  document.body.classList.remove('platform-macos', 'platform-windows', 'platform-linux', 'platform-unknown');
+  document.body.classList.add(`platform-${normalized}`);
+}
 
 function hexToRgb(hex) {
   if (!hex || typeof hex !== 'string') return null;
@@ -191,6 +206,7 @@ function renderTabs() {
 
 function applyState(nextState) {
   Object.assign(state, nextState || {});
+  applyPlatform(state.platform);
 
   const title = state.title || 'New Tab';
   const url = state.url || '';

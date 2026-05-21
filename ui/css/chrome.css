@@ -89,6 +89,10 @@ button:disabled {
   background: var(--bg);
 }
 
+.platform-macos .title-row {
+  padding: 0 12px 0 78px;
+}
+
 /* ── Tabs ───────────────────────────────────────────────────── */
 
 .tabs {
@@ -255,6 +259,10 @@ button:disabled {
 .window-controls .close:hover {
   background: var(--danger);
   color: white;
+}
+
+.platform-macos .window-controls {
+  display: none;
 }
 
 /* ── Toolbar ────────────────────────────────────────────────── */
